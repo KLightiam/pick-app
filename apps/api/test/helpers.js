@@ -140,7 +140,8 @@ export function memoryDb() {
       const trip = {
         id: randomUUID(), driverId: null, status: 'requested',
         pickupAddress: null, dropoffAddress: null, ...input,
-        requestedAt: new Date().toISOString(), acceptedAt: null,
+        requestedAt: new Date().toISOString(), acceptedAt: null, arrivedAt: null, startedAt: null,
+        completedAt: null, fareFinal: null,
         cancelledAt: null, cancelledBy: null, cancelReason: null,
       };
       trips.set(trip.id, trip);
@@ -161,6 +162,25 @@ export function memoryDb() {
       if (!hasRoom(drivers.get(driverId), loadOf(driverId), trip)) throw new NoRoomConflict();
       Object.assign(trip, { driverId, status: 'accepted', acceptedAt: new Date().toISOString() });
       return copy(trip);
+    },
+    async advance(tripId, { from, to, at }) {
+      const trip = trips.get(tripId);
+      if (trip?.status !== from) return null;
+      trip.status = to;
+      trip[{ arrived: 'arrivedAt', in_progress: 'startedAt' }[to]] = at.toISOString();
+      return copy(trip);
+    },
+    async complete(tripId, { at, fareFinal }) {
+      const trip = trips.get(tripId);
+      if (trip?.status !== 'in_progress') return null;
+      Object.assign(trip, { status: 'completed', completedAt: at.toISOString(), fareFinal });
+      return copy(trip);
+    },
+    async ridesOverlapping(driverId, { from, to }) {
+      return [...trips.values()]
+        .filter((t) => t.driverId === driverId && ['in_progress', 'completed'].includes(t.status))
+        .filter((t) => new Date(t.startedAt) < to && (!t.completedAt || new Date(t.completedAt) > new Date(from)))
+        .map(copy);
     },
     async cancel(tripId, { from, by, reason }) {
       const trip = trips.get(tripId);

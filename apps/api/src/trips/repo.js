@@ -11,8 +11,9 @@ const SELECT = `
          ${pointJson('alight')} AS alight,
          remaining_km AS "remainingKm",
          pickup_address AS "pickupAddress", dropoff_address AS "dropoffAddress",
-         fare_estimate AS "fareEstimate", currency,
-         requested_at AS "requestedAt", accepted_at AS "acceptedAt",
+         fare_estimate AS "fareEstimate", usual_fare AS "usualFare", fare_final AS "fareFinal", currency,
+         requested_at AS "requestedAt", accepted_at AS "acceptedAt", arrived_at AS "arrivedAt",
+         started_at AS "startedAt", completed_at AS "completedAt",
          cancelled_at AS "cancelledAt", cancelled_by AS "cancelledBy", cancel_reason AS "cancelReason"
     FROM trips`;
 
@@ -48,13 +49,14 @@ export function pgTripsRepo(db) {
       try {
         const { rows } = await db().query(
           `INSERT INTO trips (rider_id, pickup, dropoff, alight, pickup_address, dropoff_address,
-                              fare_estimate, currency, ride_type, seats, driver_mode, match_type, remaining_km)
+                              fare_estimate, currency, ride_type, seats, driver_mode, match_type, remaining_km,
+                              usual_fare)
            VALUES ($1, ${point('$2', '$3')}, ${point('$4', '$5')}, ${point('$6', '$7')}, $8, $9,
-                   $10, $11, $12, $13, $14, $15, $16)
+                   $10, $11, $12, $13, $14, $15, $16, $17)
            RETURNING id`,
           [t.riderId, t.pickup.lat, t.pickup.lng, t.dropoff.lat, t.dropoff.lng, t.alight.lat, t.alight.lng,
             t.pickupAddress ?? null, t.dropoffAddress ?? null, t.fareEstimate, t.currency,
-            t.rideType, t.seats, t.driverMode, t.matchType, t.remainingKm],
+            t.rideType, t.seats, t.driverMode, t.matchType, t.remainingKm, t.usualFare],
         );
         return findById(rows[0].id);
       } catch (err) {
@@ -118,6 +120,36 @@ export function pgTripsRepo(db) {
       } finally {
         client.release();
       }
+    },
+
+    /** Moves the trip to `arrived` or `in_progress` if it is still in status `from`. Returns the trip or null. */
+    async advance(tripId, { from, to, at }) {
+      const column = { arrived: 'arrived_at', in_progress: 'started_at' }[to];
+      const { rows } = await db().query(
+        `UPDATE trips SET status = $3, ${column} = $4 WHERE id = $1 AND status = $2 RETURNING id`,
+        [tripId, from, to, at],
+      );
+      return rows[0] ? findById(rows[0].id) : null;
+    },
+
+    /** Marks a trip in progress as completed with its final fare. Returns the trip or null. */
+    async complete(tripId, { at, fareFinal }) {
+      const { rows } = await db().query(
+        `UPDATE trips SET status = 'completed', completed_at = $2, fare_final = $3
+          WHERE id = $1 AND status = 'in_progress' RETURNING id`,
+        [tripId, at, fareFinal],
+      );
+      return rows[0] ? findById(rows[0].id) : null;
+    },
+
+    /** The driver's passengers who were in the car at any point between `from` and `to`. */
+    async ridesOverlapping(driverId, { from, to }) {
+      const { rows } = await db().query(
+        `${SELECT} WHERE driver_id = $1 AND status IN ('in_progress', 'completed')
+            AND started_at < $3 AND (completed_at IS NULL OR completed_at > $2)`,
+        [driverId, from, to],
+      );
+      return rows;
     },
 
     /** Cancels the trip if it is still in status `from`. Returns the trip, or null if it changed meanwhile. */

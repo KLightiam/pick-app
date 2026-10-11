@@ -122,6 +122,20 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   assert.equal(cancelled.body.trip.cancelledBy, 'rider');
   assert.equal(cancelled.body.trip.cancelReason, 'plans changed');
 
+  // Esi's ride runs to the end, alone after Ama cancelled: 65% of the usual fare
+  const esiTrip = second.body.trip.id;
+  await request(ctx.app).post(`/trips/${esiTrip}/arrived`).set('Authorization', kofi.auth).expect(200);
+  const started = await request(ctx.app).post(`/trips/${esiTrip}/start`).set('Authorization', kofi.auth).expect(200);
+  assert.ok(started.body.trip.startedAt);
+  await new Promise((r) => setTimeout(r, 20));
+  const done = await request(ctx.app).post(`/trips/${esiTrip}/complete`).set('Authorization', kofi.auth).expect(200);
+  assert.equal(done.body.trip.status, 'completed');
+  assert.ok(done.body.trip.completedAt);
+  assert.equal(done.body.trip.fareFinal, Math.round(done.body.trip.usualFare * 0.65));
+  assert.equal(done.body.nextLeg, null);
+  const freed = await request(ctx.app).get('/drivers/me').set('Authorization', kofi.auth).expect(200);
+  assert.deepEqual(freed.body.driver.load, { bookings: 0, seatsUsed: 0, hasSolo: false });
+
   // Going offline hides the driver but keeps their last location
   await request(ctx.app).post('/drivers/me/status').set('Authorization', yaw.auth).send({ online: false }).expect(200);
   const { rows } = await db().query('SELECT online, location IS NOT NULL AS has FROM drivers WHERE user_id = $1', [yaw.id]);
