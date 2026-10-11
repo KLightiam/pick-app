@@ -215,6 +215,15 @@ export function createDispatch({ trips, drivers, users, payments, notifier, opti
       return { trip, nextLeg, payment };
     },
 
+    /** Ride requests waiting for this driver, as the 'trip:offer' event sends them (for when the app reopens). */
+    async openOffers(driver) {
+      const open = await trips.listOpenOffers(driver.id);
+      return open.map((trip) => ({
+        trip: offerView(trip),
+        expiresAt: new Date(new Date(trip.requestedAt).getTime() + opts.offerTimeoutMs).toISOString(),
+      }));
+    },
+
     /** Stops pending expiry timers (for shutdown and tests). */
     close() {
       for (const id of timers.keys()) clearTimer(id);

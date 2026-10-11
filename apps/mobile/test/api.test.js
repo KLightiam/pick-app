@@ -116,3 +116,14 @@ test('payout details go to the payout account endpoint', async () => {
   assert.equal(calls[0].url, 'http://api/drivers/me/payout-account');
   assert.deepEqual(JSON.parse(calls[0].body), { network: 'MTN', number: '0241234567', name: 'Kofi' });
 });
+
+test('push tokens are registered and removed through /auth/push-token', async () => {
+  const { calls, fetchFn } = recorder(json(204, null));
+  const api = createApi({ baseUrl: 'http://api', getToken: async () => 'tok', fetchFn });
+  await api.registerPushToken('ExponentPushToken[abc]', 'android');
+  await api.unregisterPushToken('ExponentPushToken[abc]');
+  assert.deepEqual(calls.map((c) => `${c.method} ${c.url}`), [
+    'PUT http://api/auth/push-token', 'DELETE http://api/auth/push-token',
+  ]);
+  assert.deepEqual(JSON.parse(calls[0].body), { token: 'ExponentPushToken[abc]', platform: 'android' });
+});

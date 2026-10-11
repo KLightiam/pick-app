@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { api } from './src/api-instance.js';
 import { connectLive } from './src/live.js';
 import { clearToken, loadToken } from './src/session.js';
+import { registerForPush, unregisterPush } from './src/push.js';
 import { Body, Button, Screen, colors, styles } from './src/ui.js';
 import SignIn from './src/screens/SignIn.js';
 import RiderHome from './src/screens/rider/RiderHome.js';
@@ -41,7 +42,11 @@ export default function App() {
     return () => { socket?.disconnect(); setLive(null); };
   }, [user]);
 
+  // Ride requests and trip updates reach the phone as push notifications when the app is closed.
+  useEffect(() => { if (user) registerForPush(api); }, [user]);
+
   const signOut = async () => {
+    await unregisterPush(api);
     await clearToken();
     setUser(null);
   };

@@ -41,6 +41,12 @@
           "cameraPermission": "Pick uses the camera so drivers can photograph their licence, insurance and car.",
           "photosPermission": "Pick lets drivers choose photos of their documents."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0B6E4F"
+        }
       ]
     ]
   }

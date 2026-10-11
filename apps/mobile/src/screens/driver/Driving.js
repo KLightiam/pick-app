@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, ScrollView, View } from 'react-native';
+import { AppState, Linking, ScrollView, View } from 'react-native';
 import { api } from '../../api-instance.js';
 import {
   DRIVER_NEXT_STEP, MATCH_LABELS, describePayment, directionsUrl, formatMoney, liveOffers, secondsLeft,
@@ -18,16 +18,22 @@ export default function Driving({ driver, status, live, onOffline }) {
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null); // the last finished trip and its payment
 
+  // Also when the app comes back from the background, e.g. opened from a ride request notification.
   const loadTrips = useCallback(async () => {
     try {
-      const { trips: active } = await api.activeTrips();
+      const [{ trips: active }, { offers: waiting }] = await Promise.all([api.activeTrips(), api.openOffers()]);
       setTrips(active);
+      setOffers(waiting.reverse()); // newest first, like live offers
     } catch (err) {
       setError(err.message);
     }
   }, []);
   useEffect(() => { loadTrips(); }, [loadTrips]);
   useLiveEvent(live, 'connect', loadTrips);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => { if (state === 'active') loadTrips(); });
+    return () => sub.remove();
+  }, [loadTrips]);
 
   // Count down offers once a second; expired ones drop off the list.
   useEffect(() => {
