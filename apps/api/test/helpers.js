@@ -10,6 +10,7 @@ import { hasRoom } from '../src/trips/capacity.js';
 import { testProvider } from '../src/payments/providers.js';
 import { createPayments } from '../src/payments/service.js';
 import { createDocuments } from '../src/documents/service.js';
+import { createPayouts } from '../src/payouts/service.js';
 
 export function memoryOtpStore() {
   const rows = [];
@@ -240,7 +241,11 @@ export function memoryDb() {
     settlements: [],
     async balanceFor(driverId) {
       const mine = [...payments.values()].filter((x) => x.driverId === driverId);
-      const settled = paymentsRepo.settlements.filter((x) => x.driverId === driverId);
+      const settled = [
+        ...paymentsRepo.settlements.filter((x) => x.driverId === driverId),
+        ...[...payouts.values()].filter((x) => x.driverId === driverId && x.status !== 'failed')
+          .map((x) => ({ ...x, direction: 'to_driver' })),
+      ];
       if (!mine.length && !settled.length) return null;
       return { currency: (mine[0] ?? settled[0]).currency, ...driverBalance(mine, settled) };
     },
@@ -280,7 +285,76 @@ export function memoryDb() {
     },
   };
 
-  return { users: usersRepo, drivers: driversRepo, trips: tripsRepo, payments: paymentsRepo, documents: documentsRepo };
+  const payoutAccounts = new Map(); // driverId -> account
+  const payouts = new Map();
+  let payoutClock = 0;
+  const payoutsRepo = {
+    payoutAccounts,
+    payouts,
+    async findAccount(driverId) {
+      return copy(payoutAccounts.get(driverId));
+    },
+    async saveAccount(a) {
+      const row = { accountName: null, accountNumber: null, network: null, ...a, updatedAt: new Date() };
+      payoutAccounts.set(a.driverId, row);
+      return copy(row);
+    },
+    async setAccountReady(driverId, ready) {
+      const row = payoutAccounts.get(driverId);
+      if (!row) return null;
+      row.ready = ready;
+      return copy(row);
+    },
+    async createPayout({ driverId, amount, currency, provider, requestedBy, at }) {
+      if ([...payouts.values()].some((p) => p.driverId === driverId && p.status === 'pending')) return null;
+      const row = {
+        id: randomUUID(), driverId, amount, currency, provider, providerRef: null, status: 'pending', failureReason: null,
+        requestedBy: requestedBy ?? null, createdAt: new Date(at.getTime() + payoutClock++), completedAt: null,
+      };
+      payouts.set(row.id, row);
+      return copy(row);
+    },
+    async findPayout(id) {
+      return copy(payouts.get(id));
+    },
+    async updatePayout(id, { status, providerRef, reason, at }) {
+      const row = payouts.get(id);
+      if (row?.status !== 'pending') return null;
+      Object.assign(row, {
+        status, providerRef: providerRef ?? row.providerRef, failureReason: reason ?? null,
+        completedAt: status === 'pending' ? null : at,
+      });
+      return copy(row);
+    },
+    async listForDriver(driverId) {
+      return [...payouts.values()].filter((p) => p.driverId === driverId).sort((a, b) => b.createdAt - a.createdAt).map(copy);
+    },
+    async list({ status } = {}) {
+      return [...payouts.values()].filter((p) => !status || p.status === status).sort((a, b) => b.createdAt - a.createdAt).map(copy);
+    },
+    async candidates() {
+      const out = [];
+      for (const [driverId, account] of payoutAccounts) {
+        const balance = await paymentsRepo.balanceFor(driverId);
+        const mine = [...payouts.values()].filter((p) => p.driverId === driverId);
+        if (!account.ready || !drivers.get(driverId)?.approved || !(balance?.balance > 0)) continue;
+        if (mine.some((p) => p.status === 'pending')) continue;
+        out.push({
+          driverId, country: users.find((u) => u.id === driverId).country, balance: balance.balance, currency: balance.currency,
+          lastPayoutAt: mine.length ? new Date(Math.max(...mine.map((p) => p.createdAt))) : null,
+        });
+      }
+      return out;
+    },
+    async listStale(before) {
+      return [...payouts.values()].filter((p) => p.status === 'pending' && p.createdAt < before).map(copy);
+    },
+  };
+
+  return {
+    users: usersRepo, drivers: driversRepo, trips: tripsRepo, payments: paymentsRepo, documents: documentsRepo,
+    payouts: payoutsRepo,
+  };
 }
 
 /** Records texts instead of sending them; lastCode(phone) reads the code back. */
@@ -334,12 +408,12 @@ export function fakeGeocoder(places = [], { fail = false } = {}) {
 
 export function testApp({
   now, dispatchOptions, routing = straightRouter(), geocoder = fakeGeocoder(), providers: customProviders, admin,
-  storage = memoryStorage(),
+  storage = memoryStorage(), payoutsNow,
 } = {}) {
   const sms = fakeSms();
   const store = memoryOtpStore();
   const notifier = fakeNotifier();
-  const { users, drivers, trips, payments: paymentsRepo, documents: documentsRepo } = memoryDb();
+  const { users, drivers, trips, payments: paymentsRepo, documents: documentsRepo, payouts: payoutsRepo } = memoryDb();
   const documents = createDocuments({ repo: documentsRepo, storage });
   const tokens = createTokens({ secret: 'test-secret', expiresIn: '1h' });
   const otp = createOtpService({ store, sms, secret: 'test-secret', now });
@@ -348,12 +422,15 @@ export function testApp({
   const payments = createPayments({
     repo: paymentsRepo, providers, notifier, publicUrl: 'http://pick.test', emailDomain: 'riders.pick.invalid',
   });
+  const payouts = createPayouts({
+    repo: payoutsRepo, balances: paymentsRepo, providers, notifier, publicUrl: 'http://pick.test', now: payoutsNow,
+  });
   const dispatch = createDispatch({ trips, drivers, users, payments, notifier, options: dispatchOptions });
   const app = createApp({
-    deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, testCheckout, admin, documents },
+    deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, testCheckout, admin, documents },
   });
   return {
     app, sms, store, users, drivers, trips, tokens, notifier, dispatch, routing, payments, paymentsRepo, testCheckout,
-    documents, documentsRepo, storage,
+    documents, documentsRepo, storage, payouts, payoutsRepo,
   };
 }

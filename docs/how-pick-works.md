@@ -70,6 +70,8 @@ Riders choose **cash** or **the app** when they book. Either way they pay after 
 - **App:** the rider taps Pay and finishes on Paystack's page (card or mobile money, Ghana) or Stripe's page (card, Germany). Card and mobile money details never touch Pick. Paystack or Stripe tells Pick when the payment goes through, and the app also checks when the rider comes back to it. Until a ride is paid, the rider can't book another.
 - **Drivers** see how each ride is paid and, for the last 7 days, what they earned. Their balance nets what Pick collected for them in the app against the commission they owe on cash rides.
 
+**Paying drivers.** Pick sends drivers their balance every week, once it's at least GHS 20 or EUR 10. In Ghana it goes to the driver's mobile money (MTN MoMo, Telecel Cash or AirtelTigo Money) through Paystack. In Germany it goes to their bank through Stripe, after they give Stripe their ID and bank details once. Admins can also press Pay now. A driver who owes Pick commission on cash rides isn't paid until what they've earned in the app covers it.
+
 ## Settings we picked, and can change
 
 These are starting points. Each lives in one place in the code and is easy to adjust.
@@ -87,11 +89,14 @@ These are starting points. Each lives in one place in the code and is easy to ad
 | Base fares per country | placeholders | `packages/shared/src/markets.js` |
 | Pick's commission | 15% of the fare (placeholder) | `packages/shared/src/markets.js` |
 | Payment methods per country | cash and app in both | `packages/shared/src/markets.js` |
+| Driver payouts | every 7 days, from GHS 20 / EUR 10 | `packages/shared/src/markets.js` |
 
 ## Known limits
 
 - **Road routes come from OSRM**, an open-source routing engine built on OpenStreetMap. When a commuter goes online, Pick asks for the roads from where they are to their destination. As they drive, only the part of the route ahead of them can pick anyone up, and if they leave it by more than 500 m (another road), Pick asks for a new route, at most once a minute. If routing is unavailable, Pick falls back to a straight line so drivers can still go online.
-- **Drivers aren't paid out automatically yet.** Pick works out each driver's balance, and admins send the money by MoMo or bank transfer and record it in the dashboard. Automatic payouts (Paystack transfers, Stripe Connect) need drivers' payout details and identity checks.
+- **Payouts need setting up with Paystack and Stripe.** Paystack transfers come out of Pick's Paystack balance, so it has to be topped up, and OTP for transfers has to be off. Stripe Connect has to be turned on for Pick's Stripe account. Neither has been tried with real money yet.
+- **Ghanaian drivers are paid to mobile money only.** Bank accounts can be added later through the same Paystack transfers.
+- **Drivers who owe Pick aren't chased.** When a driver mostly takes cash, Pick's commission builds up as a negative balance. Admins collect it by hand and record it in the dashboard.
 - **Document lists are a first guess.** Ghana: licence, insurance, DVLA roadworthy certificate, car photo. Germany: licence, P-Schein, insurance, car photo. Confirm them, and whether commuters sharing costs need the same papers as taxi-style drivers, before launch. Pick doesn't track expiry dates yet.
 - **Paystack needs an email address for each payment.** Riders sign in by phone, so Pick sends a made-up address based on the account (`rider-<id>@riders.pick.invalid`). Paystack's receipt emails won't reach riders until Pick asks for an email.
 - **A rider could pay twice** if they open two checkout pages and pay on both. Pick counts the ride as paid once; the extra payment would need refunding by hand in Paystack or Stripe for now.
@@ -120,5 +125,5 @@ These are starting points. Each lives in one place in the code and is easy to ad
 9. ✅ Admin dashboard: driver approval and suspension, trips, and settling money with drivers
 10. ✅ Pick on the web: the same app runs in a browser, in a phone-width column on large screens, built in CI
 11. ✅ Driver documents: drivers upload them in the app, admins check them in the dashboard
-12. Automatic payouts to drivers (Paystack transfers in Ghana, Stripe Connect in Germany)
+12. ✅ Automatic payouts to drivers: mobile money through Paystack in Ghana, bank through Stripe Connect in Germany, every week or on Pay now
 13. Push notifications for a closed app, and a live map

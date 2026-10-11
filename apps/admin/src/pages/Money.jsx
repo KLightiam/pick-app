@@ -3,19 +3,44 @@ import { api } from '../session.js';
 import { useLoad } from '../useLoad.js';
 import { describeBalance, formatDateTime, formatMoney, parseMoney } from '../format.js';
 
+const PAYOUT_STATUS = {
+  pending: { text: 'On its way', pill: 'warn' },
+  paid: { text: 'Sent', pill: 'ok' },
+  failed: { text: "Didn't go through", pill: 'bad' },
+};
+
 export default function Money({ country }) {
   const balances = useLoad(() => api.balances({ country }), [country]);
   const history = useLoad(() => api.settlements(), []);
+  const payouts = useLoad(() => api.payouts({ country }), [country]);
   const [settling, setSettling] = useState(null);
+  const [paying, setPaying] = useState(null);
+  const [payError, setPayError] = useState(null);
 
-  const done = () => { setSettling(null); balances.reload(); history.reload(); };
+  const done = () => { setSettling(null); balances.reload(); history.reload(); payouts.reload(); };
+
+  const payNow = async (b) => {
+    if (!window.confirm(`Send ${formatMoney(b.balance, b.currency)} to ${b.name ?? 'this driver'} now?`)) return;
+    setPaying(b.driverId);
+    setPayError(null);
+    try {
+      const { payout } = await api.payDriver(b.driverId);
+      if (payout.status === 'failed') setPayError(`The payout didn't go through: ${payout.failureReason}`);
+      done();
+    } catch (err) {
+      setPayError(err.message);
+    } finally {
+      setPaying(null);
+    }
+  };
 
   return (
     <section>
       <h2>Money to settle</h2>
       <p className="muted">
         Pick holds what riders pay in the app and owes it to the driver. On cash rides the driver holds the fare and owes Pick its commission.
-        Until automatic payouts, send money by MoMo or bank transfer and record it here.
+        Drivers who added a payout account are paid every week automatically (MoMo through Paystack in Ghana, bank through Stripe in Germany).
+        Pay now sends a driver their balance straight away. Money that changes hands any other way can be recorded here.
       </p>
       {balances.error && <p className="error">{balances.error}</p>}
       {balances.data?.balances.length === 0 && <p className="muted">Every driver is settled.</p>}
@@ -34,14 +59,47 @@ export default function Money({ country }) {
                   <td>{formatMoney(b.commissionOnCash, b.currency)}</td>
                   <td className="muted">paid {formatMoney(b.paidToDriver, b.currency)} · received {formatMoney(b.paidByDriver, b.currency)}</td>
                   <td><strong>{describeBalance(b.balance, b.currency)}</strong></td>
-                  <td className="actions"><button className="primary" onClick={() => setSettling(b)}>Record</button></td>
+                  <td className="actions">
+                    {b.balance > 0 && b.payoutPending && <span className="pill warn">Payout on its way</span>}
+                    {b.balance > 0 && !b.payoutPending && b.payoutReady && (
+                      <button className="primary" disabled={paying === b.driverId} onClick={() => payNow(b)}>Pay now</button>
+                    )}
+                    {b.balance > 0 && !b.payoutReady && <span className="muted">No payout account</span>}
+                    <button onClick={() => setSettling(b)}>Record</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {payError && <p className="error">{payError}</p>}
       {settling && <SettleForm balance={settling} onDone={done} onCancel={() => setSettling(null)} />}
+
+      <h3>Payouts</h3>
+      {payouts.error && <p className="error">{payouts.error}</p>}
+      {payouts.data?.payouts.length === 0 && <p className="muted">None yet.</p>}
+      {payouts.data?.payouts.length > 0 && (
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Driver</th><th>Amount</th><th>Status</th><th>Sent by</th></tr></thead>
+            <tbody>
+              {payouts.data.payouts.map((p) => (
+                <tr key={p.id}>
+                  <td>{formatDateTime(p.createdAt)}</td>
+                  <td>{p.driverName ?? '—'}<div className="muted">{p.driverPhone}</div></td>
+                  <td>{formatMoney(p.amount, p.currency)}</td>
+                  <td>
+                    <span className={`pill ${PAYOUT_STATUS[p.status].pill}`}>{PAYOUT_STATUS[p.status].text}</span>
+                    {p.failureReason && <div className="muted">{p.failureReason}</div>}
+                  </td>
+                  <td>{p.requestedBy ?? 'Weekly run'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <h3>Recorded settlements</h3>
       {history.data?.settlements.length === 0 && <p className="muted">None yet.</p>}

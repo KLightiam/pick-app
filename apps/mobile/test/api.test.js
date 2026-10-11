@@ -107,3 +107,12 @@ test('document uploads send the file as-is with its type', async () => {
   assert.equal(calls[0].headers.Authorization, 'Bearer tok');
   assert.equal(calls[0].body, file);
 });
+
+test('payout details go to the payout account endpoint', async () => {
+  const { calls, fetchFn } = recorder(json(200, { account: {}, onboardingUrl: null }));
+  const api = createApi({ baseUrl: 'http://api', getToken: async () => 'tok', fetchFn });
+  await api.setupPayouts({ network: 'MTN', number: '0241234567', name: 'Kofi' });
+  assert.equal(calls[0].method, 'PUT');
+  assert.equal(calls[0].url, 'http://api/drivers/me/payout-account');
+  assert.deepEqual(JSON.parse(calls[0].body), { network: 'MTN', number: '0241234567', name: 'Kofi' });
+});

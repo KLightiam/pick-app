@@ -11,6 +11,7 @@ const opts = { skip: url ? false : 'set TEST_DATABASE_URL to run database tests'
 let ctx;
 let db;
 let drivers;
+let payoutsRepo;
 
 before(async () => {
   if (!url) return;
@@ -18,12 +19,13 @@ before(async () => {
   const [{ db: pool }, { createApp }, { createOtpService }, { pgOtpStore }, { createTokens },
     { pgUsersRepo }, { pgDriversRepo }, { pgTripsRepo }, { createDispatch },
     { pgPaymentsRepo }, { testProvider }, { createPayments }, { pgAdminRepo },
-    { pgDocumentsRepo }, { createDocuments }] = await Promise.all([
+    { pgDocumentsRepo }, { createDocuments }, { pgPayoutsRepo }, { createPayouts }] = await Promise.all([
     import('../src/db/pool.js'), import('../src/app.js'), import('../src/auth/otp.js'),
     import('../src/auth/otpStore.js'), import('../src/auth/tokens.js'), import('../src/users/repo.js'),
     import('../src/drivers/repo.js'), import('../src/trips/repo.js'), import('../src/trips/dispatch.js'),
     import('../src/payments/repo.js'), import('../src/payments/providers.js'), import('../src/payments/service.js'),
     import('../src/admin/repo.js'), import('../src/documents/repo.js'), import('../src/documents/service.js'),
+    import('../src/payouts/repo.js'), import('../src/payouts/service.js'),
   ]);
   db = pool;
   await db().query('TRUNCATE users, otp_codes CASCADE');
@@ -35,21 +37,24 @@ before(async () => {
   const trips = pgTripsRepo(db);
   const otp = createOtpService({ store: pgOtpStore(db), sms, secret: 'test-secret' });
   const testCheckout = testProvider({ publicUrl: 'http://pick.test' });
+  const providers = { paystack: testCheckout, stripe: testCheckout, test: testCheckout };
+  const paymentsRepo = pgPaymentsRepo(db);
   const payments = createPayments({
-    repo: pgPaymentsRepo(db), providers: { paystack: testCheckout, stripe: testCheckout, test: testCheckout },
-    notifier, publicUrl: 'http://pick.test', emailDomain: 'riders.pick.invalid',
+    repo: paymentsRepo, providers, notifier, publicUrl: 'http://pick.test', emailDomain: 'riders.pick.invalid',
   });
+  payoutsRepo = pgPayoutsRepo(db);
+  const payouts = createPayouts({ repo: payoutsRepo, balances: paymentsRepo, providers, notifier, publicUrl: 'http://pick.test' });
   const dispatch = createDispatch({ trips, drivers, users, payments, notifier });
   // Road routes go through a midpoint 5 km east of the start (see `at` below)
   const routing = { route: async (from, to) => ({ points: [from, { lat: 5.6, lng: -0.25 + 5 / 110.6 }, to] }) };
   ctx = {
     app: createApp({
       deps: {
-        otp, users, tokens, drivers, trips, dispatch, routing, payments, testCheckout, admin: pgAdminRepo(db),
+        otp, users, tokens, drivers, trips, dispatch, routing, payments, payouts, testCheckout, admin: pgAdminRepo(db),
         documents: createDocuments({ repo: pgDocumentsRepo(db), storage: memoryStorage() }),
       },
     }),
-    sms, notifier, dispatch, tokens,
+    sms, notifier, dispatch, tokens, testCheckout, payouts,
   };
 });
 
@@ -209,14 +214,37 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   assert.deepEqual([searched[0].documentsApproved, searched[0].documentsPending, searched[0].documentsRequired], [1, 0, 4]);
   assert.deepEqual(searched.map((d) => [d.name, d.rides, d.balance]), [['Kofi', 1, earnings.body.balance.balance]]);
 
-  // Pick pays Kofi what Esi paid in the app: his balance goes to zero
+  // Pick owes Kofi what Esi paid in the app. An admin sends GHS 1 by hand, then pays the rest to his MoMo.
   const owed = (await adminGet('/admin/balances')).body.balances;
-  assert.deepEqual(owed.map((b) => [b.name, b.balance]), [['Kofi', earnings.body.balance.balance]]);
+  assert.deepEqual(owed.map((b) => [b.name, b.balance, b.payoutReady]), [['Kofi', earnings.body.balance.balance, false]]);
   await request(ctx.app).post('/admin/settlements').set('Authorization', adminAuth)
-    .send({ driverId: kofi.id, direction: 'to_driver', amount: owed[0].balance, reference: 'MoMo 0001' }).expect(201);
-  assert.deepEqual((await adminGet('/admin/balances')).body.balances, []);
+    .send({ driverId: kofi.id, direction: 'to_driver', amount: 100, reference: 'MoMo 0001' }).expect(201);
   const settled = (await adminGet(`/admin/settlements?driverId=${kofi.id}`)).body.settlements;
   assert.deepEqual(settled.map((x) => [x.driverName, x.recordedBy, x.currency]), [['Kofi', 'Kingsley', 'GHS']]);
+
+  const payNow = () => request(ctx.app).post(`/admin/drivers/${kofi.id}/payout`).set('Authorization', adminAuth);
+  await payNow().expect(409); // no MoMo account yet
+  await request(ctx.app).put('/drivers/me/payout-account').set('Authorization', kofi.auth)
+    .send({ name: 'Kofi Mensah', number: '0242222222', network: 'MTN' }).expect(200);
+  await request(ctx.app).put('/drivers/me/payout-account').set('Authorization', kofi.auth) // changing it replaces it
+    .send({ name: 'Kofi Mensah', number: '0242222223', network: 'VOD' }).expect(200);
+  ctx.testCheckout.failNextTransfer();
+  assert.equal((await payNow().expect(201)).body.payout.status, 'failed');
+  const rest = earnings.body.balance.balance - 100;
+  assert.equal((await adminGet('/admin/balances')).body.balances[0].balance, rest); // a failed payout leaves the balance
+  const sent = (await payNow().expect(201)).body.payout;
+  assert.deepEqual([sent.amount, sent.status, sent.currency], [rest, 'paid', 'GHS']);
+  assert.deepEqual((await adminGet('/admin/balances')).body.balances, []);
+  assert.deepEqual((await adminGet('/admin/payouts')).body.payouts.map((p) => [p.driverName, p.status, p.requestedBy]),
+    [['Kofi', 'paid', 'Kingsley'], ['Kofi', 'failed', 'Kingsley']]);
+  const mine = (await request(ctx.app).get('/drivers/me/payouts').set('Authorization', kofi.auth).expect(200)).body;
+  assert.deepEqual([mine.account.network, mine.account.accountNumber, mine.payouts.length], ['VOD', '024•••2223', 2]);
+  assert.deepEqual(await ctx.payouts.runDue(), { paid: 0, pending: 0, failed: 0, checked: 0 });
+  // Only one payout per driver can be on its way at a time
+  const pending = { driverId: kofi.id, amount: 100, currency: 'GHS', provider: 'test', at: new Date() };
+  const onItsWay = await payoutsRepo.createPayout(pending);
+  assert.equal(await payoutsRepo.createPayout(pending), null);
+  await payoutsRepo.updatePayout(onItsWay.id, { status: 'failed', reason: 'test', at: new Date() });
 
   // Suspending a driver takes them offline and stops them going back online
   await request(ctx.app).post(`/admin/drivers/${yaw.id}/approval`).set('Authorization', adminAuth)

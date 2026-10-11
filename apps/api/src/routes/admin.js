@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { getMarket } from '@pick/shared';
+import { PAYOUT_STATUSES, getMarket } from '@pick/shared';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { DocumentError } from '../documents/service.js';
+import { PayoutError } from '../payouts/service.js';
 import { sendFile } from './drivers.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -9,7 +10,7 @@ const TRIP_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress', 'compl
 const optionalText = (v, max) => v === undefined || v === null || (typeof v === 'string' && v.length <= max);
 
 /** Everything under /admin is for admin accounts only (created with `pnpm --filter @pick/api make-admin`). */
-export function adminRouter({ tokens, admin, documents }) {
+export function adminRouter({ tokens, admin, documents, payouts }) {
   const router = Router();
   router.use(requireAuth(tokens), requireRole('admin'));
 
@@ -19,7 +20,7 @@ export function adminRouter({ tokens, admin, documents }) {
     try {
       await fn(req, res);
     } catch (err) {
-      if (err instanceof DocumentError) return res.status(err.status).json({ error: err.message });
+      if (err instanceof DocumentError || err instanceof PayoutError) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   };
@@ -121,6 +122,20 @@ export function adminRouter({ tokens, admin, documents }) {
       driverId, direction, amount, currency: getMarket(country).currency, reference, note, recordedBy: req.user.id,
     });
     res.status(201).json({ settlement });
+  }));
+
+  // GET /admin/payouts?status=pending|paid|failed&country= -> payouts sent to drivers, newest first
+  router.get('/payouts', handle(async (req, res) => {
+    const { status } = req.query;
+    if (status !== undefined && !PAYOUT_STATUSES.includes(status)) return res.status(400).json({ error: 'unknown status' });
+    res.json({ payouts: await payouts.list({ status, country: req.query.country }) });
+  }));
+
+  // POST /admin/drivers/:id/payout -> sends the driver their whole balance now, without waiting for the weekly run
+  router.post('/drivers/:id/payout', handle(async (req, res) => {
+    if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'Driver not found' });
+    if (!(await admin.driverCountry(req.params.id))) return res.status(404).json({ error: 'Driver not found' });
+    res.status(201).json({ payout: await payouts.payDriver(req.params.id, { requestedBy: req.user.id }) });
   }));
 
   return router;

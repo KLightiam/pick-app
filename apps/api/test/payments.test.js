@@ -167,11 +167,11 @@ test('Paystack: starts a card or mobile money checkout and verifies webhooks', a
   }));
   const signature = createHmac('sha512', 'sk_test_1').update(body).digest('hex');
   assert.deepEqual(paystack.parseWebhook(body, { 'x-paystack-signature': signature }), {
-    paymentId: payment.id, amount: 2837, currency: 'GHS',
+    kind: 'payment', paymentId: payment.id, amount: 2837, currency: 'GHS',
   });
   assert.throws(() => paystack.parseWebhook(body, { 'x-paystack-signature': 'ab'.repeat(64) }), WebhookSignatureError);
   assert.throws(() => paystack.parseWebhook(body, {}), WebhookSignatureError);
-  const other = Buffer.from(JSON.stringify({ event: 'transfer.success', data: {} }));
+  const other = Buffer.from(JSON.stringify({ event: 'customeridentification.success', data: {} }));
   assert.equal(paystack.parseWebhook(other, {
     'x-paystack-signature': createHmac('sha512', 'sk_test_1').update(other).digest('hex'),
   }), null);
@@ -199,7 +199,7 @@ test('Stripe: starts a Checkout session and verifies signed webhooks', async () 
   const sign = (t, raw = body) => `t=${t},v1=${createHmac('sha256', 'whsec_1').update(`${t}.${raw}`).digest('hex')}`;
   const t = Math.floor(now / 1000);
   assert.deepEqual(stripe.parseWebhook(body, { 'stripe-signature': sign(t) }), {
-    paid: true, paymentId: payment.id, amount: 1290, currency: 'eur',
+    kind: 'payment', paid: true, paymentId: payment.id, amount: 1290, currency: 'eur',
   });
   assert.throws(() => stripe.parseWebhook(body, { 'stripe-signature': sign(t - 600) }), WebhookSignatureError); // too old
   assert.throws(() => stripe.parseWebhook(body, { 'stripe-signature': `t=${t},v1=${'0'.repeat(64)}` }), WebhookSignatureError);
