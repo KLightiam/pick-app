@@ -101,13 +101,13 @@ These are starting points. Each lives in one place in the code and is easy to ad
 - **Paystack needs an email address for each payment.** Riders sign in by phone, so Pick sends a made-up address based on the account (`rider-<id>@riders.pick.invalid`). Paystack's receipt emails won't reach riders until Pick asks for an email.
 - **A rider could pay twice** if they open two checkout pages and pay on both. Pick counts the ride as paid once; the extra payment would need refunding by hand in Paystack or Stripe for now.
 - **No map in the app yet.** Riders choose places by searching, drivers get a Directions button that opens their maps app, and the rider sees how far away the driver is. A live map can come later.
-- **Ride requests reach drivers only while the app is open.** Push notifications for a closed app come later.
+- **Push notifications need the app built with EAS.** Ride requests and trip updates reach closed apps once the app has an EAS project and is built with it; in Expo Go and in the browser, people only see updates while the app is open. A ride request is only worth 60 seconds, so its notification is dropped if the phone can't get it in time.
 - **Shared stretches are measured by time, not distance.** Each passenger's fare is spread over their time in the car. That's simple and needs no GPS trail, but a passenger who rides alone through heavy traffic gets a bit less of the shared discount than a distance-based split would give. This could switch to distance along the road later.
 
 ## A trip, step by step
 
 1. The passenger asks for options and books a driver.
-2. The driver accepts within 60 seconds.
+2. The driver accepts within 60 seconds. If their app is closed, the request reaches them as a push notification.
 3. The driver taps **Arrived** at the pickup, then **Start** once the passenger is in the car. Until then, either side can cancel.
 4. The driver taps **Complete** at the drop-off. The final fare is worked out and both are told. The rider pays the driver in cash, or pays in the app.
 5. After a partway ride, the passenger's app gets the rest of the journey (from where they got off to where they're going) so they can book their next ride straight away.
@@ -126,4 +126,5 @@ These are starting points. Each lives in one place in the code and is easy to ad
 10. ✅ Pick on the web: the same app runs in a browser, in a phone-width column on large screens, built in CI
 11. ✅ Driver documents: drivers upload them in the app, admins check them in the dashboard
 12. ✅ Automatic payouts to drivers: mobile money through Paystack in Ghana, bank through Stripe Connect in Germany, every week or on Pay now
-13. Push notifications for a closed app, and a live map
+13. ✅ Push notifications: ride requests for drivers and trip updates for riders when the app is closed
+14. A live map: the driver's car on a map for the rider, and the route for the driver

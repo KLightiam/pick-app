@@ -33,6 +33,11 @@ export const config = {
     endpoint: process.env.S3_ENDPOINT, // for Cloudflare R2, MinIO and others; leave empty for AWS
     dir: process.env.UPLOADS_DIR ?? new URL('../uploads', import.meta.url).pathname,
   },
+  // Push notifications through Expo. EXPO_ACCESS_TOKEN is only needed if "enhanced push security" is on in Expo.
+  push: {
+    enabled: process.env.PUSH_NOTIFICATIONS !== 'off',
+    expoAccessToken: process.env.EXPO_ACCESS_TOKEN,
+  },
   geocoderUrl: process.env.GEOCODER_URL ?? 'https://photon.komoot.io',
   sms: {
     provider: process.env.SMS_PROVIDER ?? 'console', // 'console' | 'twilio'

@@ -75,6 +75,12 @@ export function tripsRouter({ tokens, trips, dispatch, payments }) {
     res.json({ trips: trip ? [trip] : [] });
   }));
 
+  // GET /trips/offers -> { offers: [{ trip, expiresAt }] }: ride requests still waiting for this driver to accept,
+  // for when the app opens from a push notification
+  router.get('/offers', auth, requireRole('driver'), handle(async (req, res) => {
+    res.json({ offers: await dispatch.openOffers(req.user) });
+  }));
+
   // GET /trips/:id -> only the trip's rider and driver can see it
   router.get('/:id', auth, handle(async (req, res) => {
     const trip = await trips.findById(req.params.id);

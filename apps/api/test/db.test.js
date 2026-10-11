@@ -12,6 +12,7 @@ let ctx;
 let db;
 let drivers;
 let payoutsRepo;
+let pushTokens;
 
 before(async () => {
   if (!url) return;
@@ -19,13 +20,13 @@ before(async () => {
   const [{ db: pool }, { createApp }, { createOtpService }, { pgOtpStore }, { createTokens },
     { pgUsersRepo }, { pgDriversRepo }, { pgTripsRepo }, { createDispatch },
     { pgPaymentsRepo }, { testProvider }, { createPayments }, { pgAdminRepo },
-    { pgDocumentsRepo }, { createDocuments }, { pgPayoutsRepo }, { createPayouts }] = await Promise.all([
+    { pgDocumentsRepo }, { createDocuments }, { pgPayoutsRepo }, { createPayouts }, { pgPushTokensRepo }] = await Promise.all([
     import('../src/db/pool.js'), import('../src/app.js'), import('../src/auth/otp.js'),
     import('../src/auth/otpStore.js'), import('../src/auth/tokens.js'), import('../src/users/repo.js'),
     import('../src/drivers/repo.js'), import('../src/trips/repo.js'), import('../src/trips/dispatch.js'),
     import('../src/payments/repo.js'), import('../src/payments/providers.js'), import('../src/payments/service.js'),
     import('../src/admin/repo.js'), import('../src/documents/repo.js'), import('../src/documents/service.js'),
-    import('../src/payouts/repo.js'), import('../src/payouts/service.js'),
+    import('../src/payouts/repo.js'), import('../src/payouts/service.js'), import('../src/push/repo.js'),
   ]);
   db = pool;
   await db().query('TRUNCATE users, otp_codes CASCADE');
@@ -43,6 +44,7 @@ before(async () => {
     repo: paymentsRepo, providers, notifier, publicUrl: 'http://pick.test', emailDomain: 'riders.pick.invalid',
   });
   payoutsRepo = pgPayoutsRepo(db);
+  pushTokens = pgPushTokensRepo(db);
   const payouts = createPayouts({ repo: payoutsRepo, balances: paymentsRepo, providers, notifier, publicUrl: 'http://pick.test' });
   const dispatch = createDispatch({ trips, drivers, users, payments, notifier });
   // Road routes go through a midpoint 5 km east of the start (see `at` below)
@@ -50,7 +52,7 @@ before(async () => {
   ctx = {
     app: createApp({
       deps: {
-        otp, users, tokens, drivers, trips, dispatch, routing, payments, payouts, testCheckout, admin: pgAdminRepo(db),
+        otp, users, tokens, drivers, trips, dispatch, routing, payments, payouts, pushTokens, testCheckout, admin: pgAdminRepo(db),
         documents: createDocuments({ repo: pgDocumentsRepo(db), storage: memoryStorage() }),
       },
     }),
@@ -122,6 +124,8 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   assert.ok(Math.abs(trip.pickup.lat - at(1).lat) < 1e-9);
   assert.deepEqual(trip.alight, trip.dropoff);
   await request(ctx.app).post('/trips').set('Authorization', ama.auth).send({ ...ride, driverId: kofi.id }).expect(409);
+  const waiting = (await request(ctx.app).get('/trips/offers').set('Authorization', kofi.auth).expect(200)).body.offers;
+  assert.deepEqual(waiting.map((o) => o.trip.id), [trip.id]);
   await request(ctx.app).post(`/trips/${trip.id}/accept`).set('Authorization', kofi.auth).expect(200);
 
   const second = await request(ctx.app).post('/trips').set('Authorization', esi.auth)
@@ -240,6 +244,18 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   const mine = (await request(ctx.app).get('/drivers/me/payouts').set('Authorization', kofi.auth).expect(200)).body;
   assert.deepEqual([mine.account.network, mine.account.accountNumber, mine.payouts.length], ['VOD', '024•••2223', 2]);
   assert.deepEqual(await ctx.payouts.runDue(), { paid: 0, pending: 0, failed: 0, checked: 0 });
+  // Kofi's phone gets push notifications until he signs out; Esi signing in on it takes it over
+  const phoneToken = 'ExponentPushToken[kofi-phone]';
+  const putToken = (user) => request(ctx.app).put('/auth/push-token').set('Authorization', user.auth)
+    .send({ token: phoneToken, platform: 'android' }).expect(204);
+  await putToken(kofi);
+  await putToken(kofi); // registering again is fine
+  assert.deepEqual(await pushTokens.listForUser(kofi.id), [phoneToken]);
+  await putToken(esi);
+  assert.deepEqual([await pushTokens.listForUser(kofi.id), await pushTokens.listForUser(esi.id)], [[], [phoneToken]]);
+  await request(ctx.app).delete('/auth/push-token').set('Authorization', esi.auth).send({ token: phoneToken }).expect(204);
+  assert.deepEqual(await pushTokens.listForUser(esi.id), []);
+
   // Only one payout per driver can be on its way at a time
   const pending = { driverId: kofi.id, amount: 100, currency: 'GHS', provider: 'test', at: new Date() };
   const onItsWay = await payoutsRepo.createPayout(pending);

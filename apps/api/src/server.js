@@ -24,6 +24,9 @@ import { createStorage } from './documents/storage.js';
 import { createDocuments } from './documents/service.js';
 import { pgPayoutsRepo } from './payouts/repo.js';
 import { createPayouts } from './payouts/service.js';
+import { pgPushTokensRepo } from './push/repo.js';
+import { expoPushSender } from './push/expo.js';
+import { withPush } from './push/notifier.js';
 
 const server = http.createServer();
 const tokens = createTokens({ secret: config.jwtSecret, expiresIn: config.jwtExpiresIn });
@@ -33,7 +36,10 @@ const trips = pgTripsRepo(db);
 const routing = createRouting(config.routing);
 const routeKeeper = createRouteKeeper({ drivers, routing });
 const io = attachRealtime(server, { corsOrigin: config.corsOrigin, tokens, drivers, routeKeeper });
-const notifier = socketNotifier(io);
+const pushTokens = pgPushTokensRepo(db);
+const notifier = config.push.enabled
+  ? withPush(socketNotifier(io), { tokens: pushTokens, sender: expoPushSender({ accessToken: config.push.expoAccessToken }) })
+  : socketNotifier(io);
 const providers = createPaymentProviders({ ...config.payments, publicUrl: config.publicUrl, isProduction: config.isProduction });
 const paymentsRepo = pgPaymentsRepo(db);
 const payments = createPayments({
@@ -50,6 +56,7 @@ const deps = {
   otp: createOtpService({ store: pgOtpStore(db), sms: createSms(config.sms), secret: config.jwtSecret }),
   payments,
   payouts,
+  pushTokens,
   admin: pgAdminRepo(db),
   documents: createDocuments({
     repo: pgDocumentsRepo(db), storage: createStorage({ ...config.storage, isProduction: config.isProduction }),

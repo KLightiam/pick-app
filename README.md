@@ -37,10 +37,12 @@ pnpm test
 | POST | `/auth/code` | Text a 6-digit sign-in code to `{ phone }` (+233 or +49 mobile numbers) |
 | POST | `/auth/verify` | Check `{ phone, code }` and return `{ token, user }`; new accounts also send `role` (`rider` or `driver`) and optional `name` |
 | GET | `/auth/me` | The signed-in user (send `Authorization: Bearer <token>`) |
+| PUT, DELETE | `/auth/push-token` | `{ token, platform }` registers this phone's Expo push token; DELETE `{ token }` on sign-out |
 | POST | `/trips/estimate` | Fare, distance and time for `{ country, pickup, dropoff }`, in GHS or EUR |
 | POST | `/trips/options` | Drivers who can take a ride, best match first, with prices: `{ pickup, dropoff, rideType?, seats? }` |
 | POST | `/trips` | Book the chosen driver: `{ driverId, pickup, dropoff, rideType?, seats?, paymentMethod?, pickupAddress?, dropoffAddress? }`; `paymentMethod` is `cash` (default) or `app` |
 | GET | `/trips/active` | `{ trips }`: the rider's current trip, or the driver's current passengers (for when the app reopens) |
+| GET | `/trips/offers` | Drivers: `{ offers }` still waiting to be accepted, as `trip:offer` sends them (for when the app opens from a notification) |
 | GET | `/trips/:id` | The trip, for its rider and driver only |
 | GET | `/trips/:id/payment` | `{ payment }` once the trip is complete: cash, or an app payment that's pending or paid |
 | POST | `/trips/:id/pay` | Rider starts paying in the app: `{ checkoutUrl }` is the Paystack or Stripe page to open |
@@ -102,6 +104,12 @@ Scan the QR code with Expo Go on your phone (it must be on the same Wi-Fi), or p
 - **Drivers** add their car, choose commute (with a destination) or go-anywhere and how many seats to share, go online, accept requests, and tap through Arrived, Start and Drop off. Their location is sent while they're online.
 
 With `SMS_PROVIDER=console`, sign-in codes are printed in the API terminal. New driver accounts need approving before they can go online: `pnpm --filter @pick/api approve-driver +233241234567`.
+
+### Push notifications
+
+When the app is closed, drivers get ride requests and riders get trip updates (driver on the way, arrived, trip complete, cancelled) as push notifications, sent through Expo's push service. Drivers also hear when a ride is paid in the app and when a payout is sent. While the app is open, the live connection shows everything and no banner pops up.
+
+Expo push tokens need an EAS project: run `npx eas init` in `apps/mobile` once, which adds the project id to `app.json`, and build the app with EAS (push notifications don't work in Expo Go on Android). Without a project id the app runs as before, just without pushes. The API needs nothing unless "enhanced push security" is on in Expo, in which case set `EXPO_ACCESS_TOKEN`; `PUSH_NOTIFICATIONS=off` turns sending off.
 
 ### Pick on the web
 

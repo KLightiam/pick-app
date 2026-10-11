@@ -40,6 +40,8 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
     requestCode: (phone) => call('POST', '/auth/code', { phone }),
     verify: ({ phone, code, role, name }) => call('POST', '/auth/verify', { phone, code, role, name }),
     me: () => call('GET', '/auth/me'),
+    registerPushToken: (token, platform) => call('PUT', '/auth/push-token', { token, platform }),
+    unregisterPushToken: (token) => call('DELETE', '/auth/push-token', { token }),
 
     // Places
     searchPlaces: (q, near) => call('GET', `/places/search?${query({ q, lat: near?.lat, lng: near?.lng })}`),
@@ -50,6 +52,7 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
 
     // Trips (riders and drivers)
     activeTrips: () => call('GET', '/trips/active'),
+    openOffers: () => call('GET', '/trips/offers'),
     trip: (id) => call('GET', `/trips/${id}`),
     cancel: (id, reason) => call('POST', `/trips/${id}/cancel`, { reason }),
     payment: (id) => call('GET', `/trips/${id}/payment`),

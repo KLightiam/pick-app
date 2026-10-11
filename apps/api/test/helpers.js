@@ -11,6 +11,7 @@ import { testProvider } from '../src/payments/providers.js';
 import { createPayments } from '../src/payments/service.js';
 import { createDocuments } from '../src/documents/service.js';
 import { createPayouts } from '../src/payouts/service.js';
+import { withPush } from '../src/push/notifier.js';
 
 export function memoryOtpStore() {
   const rows = [];
@@ -165,6 +166,9 @@ export function memoryDb() {
     },
     async wasOffered(tripId, driverId) {
       return offers.get(tripId)?.has(driverId) ?? false;
+    },
+    async listOpenOffers(driverId) {
+      return [...trips.values()].filter((t) => t.status === 'requested' && offers.get(t.id)?.has(driverId)).map(copy);
     },
     async accept(tripId, driverId) {
       const trip = trips.get(tripId);
@@ -385,6 +389,31 @@ export function fakeNotifier() {
   };
 }
 
+/** Phones' push tokens, in memory. */
+export function memoryPushTokens() {
+  const rows = new Map(); // token -> { userId, platform }
+  return {
+    rows,
+    async save({ userId, token, platform }) { rows.set(token, { userId, platform }); },
+    async listForUser(userId) { return [...rows].filter(([, r]) => r.userId === userId).map(([t]) => t); },
+    async remove(token, userId) { if (!userId || rows.get(token)?.userId === userId) rows.delete(token); },
+  };
+}
+
+/** Records push notifications instead of sending them; tokens in `uninstalled` come back unregistered. */
+export function fakePushSender() {
+  const sent = [];
+  const uninstalled = new Set();
+  return {
+    sent,
+    uninstalled,
+    async send(messages) {
+      sent.push(...messages);
+      return messages.map((m) => ({ token: m.to, ok: !uninstalled.has(m.to), unregistered: uninstalled.has(m.to) }));
+    },
+  };
+}
+
 /** Keeps uploaded files in memory. */
 export function memoryStorage() {
   const files = new Map();
@@ -412,7 +441,10 @@ export function testApp({
 } = {}) {
   const sms = fakeSms();
   const store = memoryOtpStore();
-  const notifier = fakeNotifier();
+  const liveNotifier = fakeNotifier();
+  const pushTokens = memoryPushTokens();
+  const pushSender = fakePushSender();
+  const notifier = withPush(liveNotifier, { tokens: pushTokens, sender: pushSender });
   const { users, drivers, trips, payments: paymentsRepo, documents: documentsRepo, payouts: payoutsRepo } = memoryDb();
   const documents = createDocuments({ repo: documentsRepo, storage });
   const tokens = createTokens({ secret: 'test-secret', expiresIn: '1h' });
@@ -427,10 +459,10 @@ export function testApp({
   });
   const dispatch = createDispatch({ trips, drivers, users, payments, notifier, options: dispatchOptions });
   const app = createApp({
-    deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, testCheckout, admin, documents },
+    deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, testCheckout, admin, documents, pushTokens },
   });
   return {
     app, sms, store, users, drivers, trips, tokens, notifier, dispatch, routing, payments, paymentsRepo, testCheckout,
-    documents, documentsRepo, storage, payouts, payoutsRepo,
+    documents, documentsRepo, storage, payouts, payoutsRepo, pushTokens, pushSender,
   };
 }

@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { parseMarketPhone } from '@pick/shared';
 import { OtpError } from '../auth/otp.js';
 import { requireAuth } from '../auth/middleware.js';
+import { isExpoPushToken } from '../push/expo.js';
 
 const SIGNUP_ROLES = ['rider', 'driver'];
 
-export function authRouter({ otp, users, tokens }) {
+export function authRouter({ otp, users, tokens, pushTokens }) {
   const router = Router();
 
   const otpErrorStatus = { rate_limited: 429, invalid_code: 401 };
@@ -47,6 +48,23 @@ export function authRouter({ otp, users, tokens }) {
     const user = await users.findById(req.user.id);
     if (!user) return res.status(401).json({ error: 'sign in required' });
     res.json({ user });
+  }));
+
+  // PUT /auth/push-token { token, platform: 'ios' | 'android' } -> this phone gets push notifications for this account
+  router.put('/push-token', requireAuth(tokens), handle(async (req, res) => {
+    const { token, platform } = req.body ?? {};
+    if (!isExpoPushToken(token)) return res.status(400).json({ error: 'token must be an Expo push token' });
+    if (!['ios', 'android'].includes(platform)) return res.status(400).json({ error: 'platform must be "ios" or "android"' });
+    await pushTokens.save({ userId: req.user.id, token, platform });
+    res.status(204).end();
+  }));
+
+  // DELETE /auth/push-token { token } -> on sign-out, so the next person on this phone doesn't get your notifications
+  router.delete('/push-token', requireAuth(tokens), handle(async (req, res) => {
+    const { token } = req.body ?? {};
+    if (!isExpoPushToken(token)) return res.status(400).json({ error: 'token must be an Expo push token' });
+    await pushTokens.remove(token, req.user.id);
+    res.status(204).end();
   }));
 
   return router;

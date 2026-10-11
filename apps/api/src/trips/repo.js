@@ -86,6 +86,16 @@ export function pgTripsRepo(db) {
       return rows.map((r) => r.id);
     },
 
+    /** Requests offered to this driver that nobody has accepted or cancelled yet, oldest first. */
+    async listOpenOffers(driverId) {
+      const { rows } = await db().query(
+        `${SELECT} WHERE status = 'requested' AND id IN (SELECT trip_id FROM trip_offers WHERE driver_id = $1)
+          ORDER BY requested_at`,
+        [driverId],
+      );
+      return rows;
+    },
+
     async wasOffered(tripId, driverId) {
       const { rowCount } = await db().query(
         'SELECT 1 FROM trip_offers WHERE trip_id = $1 AND driver_id = $2', [tripId, driverId],

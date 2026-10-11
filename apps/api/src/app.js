@@ -8,7 +8,7 @@ import { paymentsRouter } from './routes/payments.js';
 import { adminRouter } from './routes/admin.js';
 
 /**
- * deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, admin, documents, testCheckout? }
+ * deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, admin, documents, pushTokens, testCheckout? }
  * See server.js for the real ones and test/helpers.js for in-memory fakes.
  */
 export function createApp({ corsOrigin = '*', deps }) {
