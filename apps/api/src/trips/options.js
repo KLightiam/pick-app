@@ -1,5 +1,5 @@
 import {
-  getMarket, matchAnywhere, matchCommute, quoteFare, rankMatches, usualFare, MATCH_DEFAULTS,
+  getMarket, matchAnywhere, matchCommute, quoteFare, rankMatches, trimRoute, usualFare, MATCH_DEFAULTS,
 } from '@pick/shared';
 import { hasRoom, seatsLeft } from './capacity.js';
 
@@ -10,7 +10,7 @@ import { hasRoom, seatsLeft } from './capacity.js';
 export function evaluateDriver(driver, { pickup, dropoff, rideType, seats }, market, matchOptions = MATCH_DEFAULTS) {
   if (!hasRoom(driver, driver.load, { rideType, seats })) return null;
   const match = driver.mode === 'commute'
-    ? driver.route && matchCommute(driver.route, pickup, dropoff, matchOptions)
+    ? driver.route && matchCommute(routeAhead(driver), pickup, dropoff, matchOptions)
     : driver.location && matchAnywhere(driver.location, pickup, dropoff, matchOptions);
   if (!match) return null;
 
@@ -31,6 +31,9 @@ export function evaluateDriver(driver, { pickup, dropoff, rideType, seats }, mar
 }
 
 const round1 = (n) => Math.round(n * 10) / 10;
+
+// Only the part of a commuter's route still ahead of them can pick anyone up.
+const routeAhead = (driver) => (driver.location ? trimRoute(driver.route, driver.location).route : driver.route);
 
 /** Every driver who can take this ride, best match first. */
 export async function findRideOptions({ drivers }, rider, request, matchOptions = MATCH_DEFAULTS) {

@@ -59,3 +59,18 @@ export function projectOntoRoute(route, p, { minAlongKm = 0 } = {}) {
   }
   return best;
 }
+
+/**
+ * The part of a route still ahead of a driver at `location`: it starts at the
+ * point on the route closest to them. `offRouteKm` is how far they are from it.
+ */
+export function trimRoute(route, location) {
+  const here = projectOntoRoute(route, location);
+  const ahead = [here.point];
+  let walked = 0;
+  for (let i = 1; i < route.length; i++) {
+    walked += routeLengthKm([route[i - 1], route[i]]);
+    if (walked > here.alongKm + 1e-9) ahead.push(route[i]);
+  }
+  return { route: ahead, offRouteKm: here.crossKm };
+}

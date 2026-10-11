@@ -11,6 +11,10 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
   jwtSecret: process.env.JWT_SECRET ?? 'dev-only-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '30d',
+  routing: {
+    provider: process.env.ROUTING_PROVIDER ?? 'osrm', // 'osrm' | 'straight'
+    osrmUrl: process.env.OSRM_URL ?? 'https://router.project-osrm.org',
+  },
   sms: {
     provider: process.env.SMS_PROVIDER ?? 'console', // 'console' | 'twilio'
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,

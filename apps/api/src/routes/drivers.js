@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { isValidPoint } from '@pick/shared';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 
-export function driversRouter({ tokens, drivers }) {
+export function driversRouter({ tokens, drivers, routing }) {
   const router = Router();
 
   // GET /drivers/nearby?lat=..&lng=..&radiusKm=5 -> cars with free seats to show on the rider's map
@@ -70,8 +70,14 @@ export function driversRouter({ tokens, drivers }) {
     }
     if (!driver.approved) return res.status(403).json({ error: 'Your driver account is waiting for approval' });
 
-    await drivers.setStatus(req.user.id, { online: true, location, mode, destination, destinationAddress, seatsOffered });
-    res.json({ online: true, mode, seatsOffered });
+    const route = mode === 'commute' ? await routing.route(location, destination) : null;
+    await drivers.setStatus(req.user.id, {
+      online: true, location, mode, destination, destinationAddress, seatsOffered, route: route?.points,
+    });
+    res.json({
+      online: true, mode, seatsOffered,
+      route: route && { points: route.points, distanceKm: route.distanceKm, durationMin: route.durationMin, source: route.source },
+    });
   }));
 
   return router;

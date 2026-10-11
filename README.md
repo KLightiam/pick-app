@@ -91,3 +91,13 @@ pnpm --filter @pick/api approve-driver +233241234567
 pnpm db:up && pnpm db:migrate
 TEST_DATABASE_URL=postgres://pick:pick@localhost:5432/pick pnpm test
 ```
+
+## Road routes
+
+Commuters' routes come from [OSRM](https://project-osrm.org), open-source routing on OpenStreetMap data. Set `ROUTING_PROVIDER` and `OSRM_URL` in `apps/api/.env`:
+
+- **Development:** the default is OSRM's public demo server, which is fine for trying things out but not for real traffic.
+- **Production:** run your own OSRM server with the Ghana and Germany map extracts from [Geofabrik](https://download.geofabrik.de), for example with the `osrm/osrm-backend` Docker image, and point `OSRM_URL` at it.
+- **Tests:** `ROUTING_PROVIDER=straight` uses straight lines.
+
+If OSRM can't be reached, the API falls back to a straight line and logs a warning, so drivers can still go online.

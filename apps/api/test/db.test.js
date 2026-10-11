@@ -31,7 +31,9 @@ before(async () => {
   const trips = pgTripsRepo(db);
   const otp = createOtpService({ store: pgOtpStore(db), sms, secret: 'test-secret' });
   const dispatch = createDispatch({ trips, drivers, users, notifier });
-  ctx = { app: createApp({ deps: { otp, users, tokens, drivers, trips, dispatch } }), sms, notifier, dispatch };
+  // Road routes go through a midpoint 5 km east of the start (see `at` below)
+  const routing = { route: async (from, to) => ({ points: [from, { lat: 5.6, lng: -0.25 + 5 / 110.6 }, to] }) };
+  ctx = { app: createApp({ deps: { otp, users, tokens, drivers, trips, dispatch, routing } }), sms, notifier, dispatch };
 });
 
 after(async () => {
@@ -74,8 +76,8 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
 
   const profile = await request(ctx.app).get('/drivers/me').set('Authorization', kofi.auth).expect(200);
   assert.equal(profile.body.driver.mode, 'commute');
-  assert.equal(profile.body.driver.route.length, 2);
-  assert.ok(Math.abs(profile.body.driver.route[1].lng - at(10).lng) < 1e-9);
+  assert.equal(profile.body.driver.route.length, 3);
+  assert.ok(Math.abs(profile.body.driver.route[2].lng - at(10).lng) < 1e-9);
   assert.deepEqual(profile.body.driver.load, { bookings: 0, seatsUsed: 0, hasSolo: false });
 
   const nearby = await request(ctx.app).get(`/drivers/nearby?lat=${at(1).lat}&lng=${at(1).lng}`).expect(200);
@@ -112,10 +114,13 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   const stillFree = await request(ctx.app).get(`/drivers/nearby?lat=${at(1).lat}&lng=${at(1).lng}`).expect(200);
   assert.deepEqual(stillFree.body.drivers.map((d) => d.driverId), [yaw.id]);
 
-  // Moving restarts a commuter's route from where they are
+  // Moving updates the location; a new route replaces the old one
   await drivers.updateLocation(kofi.id, at(3));
+  await drivers.setRoute(kofi.id, [at(3), at(6, 1), at(10)]);
   const moved = await request(ctx.app).get('/drivers/me').set('Authorization', kofi.auth).expect(200);
-  assert.ok(Math.abs(moved.body.driver.route[0].lng - at(3).lng) < 1e-9);
+  assert.ok(Math.abs(moved.body.driver.location.lng - at(3).lng) < 1e-9);
+  assert.equal(moved.body.driver.route.length, 3);
+  assert.ok(Math.abs(moved.body.driver.route[1].lat - at(6, 1).lat) < 1e-9);
 
   const cancelled = await request(ctx.app).post(`/trips/${trip.id}/cancel`).set('Authorization', ama.auth)
     .send({ reason: 'plans changed' }).expect(200);
