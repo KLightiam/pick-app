@@ -13,6 +13,7 @@
     "make-admin": "node --env-file-if-exists=.env src/scripts/make-admin.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1149.0",
     "@pick/shared": "workspace:*",
     "cors": "^2.8.6",
     "express": "^5.3.0",

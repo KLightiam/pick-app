@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { getMarket } from '@pick/shared';
 import { requireAuth, requireRole } from '../auth/middleware.js';
+import { DocumentError } from '../documents/service.js';
+import { sendFile } from './drivers.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TRIP_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress', 'completed', 'cancelled'];
 const optionalText = (v, max) => v === undefined || v === null || (typeof v === 'string' && v.length <= max);
 
 /** Everything under /admin is for admin accounts only (created with `pnpm --filter @pick/api make-admin`). */
-export function adminRouter({ tokens, admin }) {
+export function adminRouter({ tokens, admin, documents }) {
   const router = Router();
   router.use(requireAuth(tokens), requireRole('admin'));
 
@@ -17,6 +19,7 @@ export function adminRouter({ tokens, admin }) {
     try {
       await fn(req, res);
     } catch (err) {
+      if (err instanceof DocumentError) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   };
@@ -38,7 +41,10 @@ export function adminRouter({ tokens, admin }) {
       return res.status(400).json({ error: 'status must be pending, approved or all' });
     }
     if (!optionalText(req.query.q, 60)) return res.status(400).json({ error: 'search is too long' });
-    res.json({ drivers: await admin.listDrivers({ status, q: req.query.q, country: req.query.country }) });
+    const drivers = await admin.listDrivers({ status, q: req.query.q, country: req.query.country });
+    res.json({
+      drivers: drivers.map((d) => ({ ...d, documentsRequired: getMarket(d.country).driverDocuments.length })),
+    });
   }));
 
   // POST /admin/drivers/:id/approval { approved: true | false } -> approve, or suspend (also takes them offline)
@@ -49,6 +55,34 @@ export function adminRouter({ tokens, admin }) {
     const found = await admin.setApproval(req.params.id, { approved, by: req.user.id });
     if (!found) return res.status(404).json({ error: 'Driver not found' });
     res.json({ approved });
+  }));
+
+  // GET /admin/drivers/:id/documents -> { checklist, history }: what the driver's country asks for, and every upload
+  router.get('/drivers/:id/documents', handle(async (req, res) => {
+    if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'Driver not found' });
+    const country = await admin.driverCountry(req.params.id);
+    if (!country) return res.status(404).json({ error: 'Driver not found' });
+    res.json({
+      checklist: await documents.checklistFor(req.params.id, country),
+      history: await documents.history(req.params.id),
+    });
+  }));
+
+  // GET /admin/documents/:id/file -> the uploaded photo or PDF
+  router.get('/documents/:id/file', handle(async (req, res) => {
+    if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'Document not found' });
+    sendFile(res, await documents.file(req.user, req.params.id));
+  }));
+
+  // POST /admin/documents/:id/review { status: 'approved' | 'rejected', reason? } -> the driver sees the reason
+  router.post('/documents/:id/review', handle(async (req, res) => {
+    const { status, reason } = req.body ?? {};
+    if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'Document not found' });
+    if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'status must be approved or rejected' });
+    if (status === 'rejected' && !(typeof reason === 'string' && reason.trim() && reason.length <= 300)) {
+      return res.status(400).json({ error: 'Say why the document was rejected, so the driver can fix it' });
+    }
+    res.json({ document: await documents.review(req.user, req.params.id, { status, reason: reason?.trim() }) });
   }));
 
   // GET /admin/trips?status=&country=&before=<requestedAt of the last trip shown>

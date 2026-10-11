@@ -47,3 +47,12 @@ test('balances and payments in words', () => {
   assert.equal(describePayment({ status: 'completed', paymentMethod: 'cash' }), 'Cash');
   assert.equal(describePayment({ status: 'requested', paymentMethod: 'app' }), 'App');
 });
+
+test('document files are fetched with the sign-in header', async () => {
+  const calls = [];
+  const fetchFn = async (url, init) => { calls.push({ url, ...init }); return { ok: true, blob: async () => 'BLOB' }; };
+  const api = createApi({ baseUrl: 'http://api', getToken: () => 'tok', fetchFn });
+  assert.equal(await api.documentFile('doc1'), 'BLOB');
+  assert.equal(calls[0].url, 'http://api/admin/documents/doc1/file');
+  assert.equal(calls[0].headers.Authorization, 'Bearer tok');
+});

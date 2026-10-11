@@ -24,6 +24,13 @@ export const config = {
     // Paystack needs an email per payment; riders sign in by phone, so one is made up on this domain.
     emailDomain: process.env.PAYSTACK_EMAIL_DOMAIN ?? 'riders.pick.invalid',
   },
+  // Driver documents: an S3-compatible bucket in production, a folder on disk in development.
+  storage: {
+    bucket: process.env.S3_BUCKET,
+    region: process.env.S3_REGION ?? 'auto',
+    endpoint: process.env.S3_ENDPOINT, // for Cloudflare R2, MinIO and others; leave empty for AWS
+    dir: process.env.UPLOADS_DIR ?? new URL('../uploads', import.meta.url).pathname,
+  },
   geocoderUrl: process.env.GEOCODER_URL ?? 'https://photon.komoot.io',
   sms: {
     provider: process.env.SMS_PROVIDER ?? 'console', // 'console' | 'twilio'

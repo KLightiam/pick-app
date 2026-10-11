@@ -47,10 +47,17 @@ export function pgAdminRepo(db) {
         `SELECT d.user_id AS id, u.name, u.phone, u.country, u.created_at AS "joinedAt",
                 d.vehicle_make AS "vehicleMake", d.vehicle_plate AS "vehiclePlate", d.seats,
                 d.approved, d.approved_at AS "approvedAt", d.online, d.mode,
-                COALESCE(b.rides, 0)::int AS rides, COALESCE(b.balance, 0)::int AS balance, b.currency
+                COALESCE(b.rides, 0)::int AS rides, COALESCE(b.balance, 0)::int AS balance, b.currency,
+                COALESCE(docs.approved, 0)::int AS "documentsApproved", COALESCE(docs.pending, 0)::int AS "documentsPending"
            FROM drivers d
            JOIN users u ON u.id = d.user_id
            LEFT JOIN driver_balances b ON b.driver_id = d.user_id
+           LEFT JOIN LATERAL (
+             SELECT count(*) FILTER (WHERE latest.status = 'approved') AS approved,
+                    count(*) FILTER (WHERE latest.status = 'pending') AS pending
+               FROM (SELECT DISTINCT ON (kind) status FROM driver_documents
+                      WHERE driver_id = d.user_id ORDER BY kind, uploaded_at DESC) latest
+           ) docs ON true
           WHERE ($1 = 'all' OR ($1 = 'pending' AND NOT d.approved) OR ($1 = 'approved' AND d.approved))
             AND ($2::text IS NULL OR u.country = $2)
             AND ($3::text IS NULL OR u.name ILIKE '%' || $3 || '%' OR u.phone LIKE '%' || $3 || '%'

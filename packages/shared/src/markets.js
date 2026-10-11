@@ -10,6 +10,8 @@ export const MARKETS = Object.freeze({
     paymentProvider: 'paystack',
     paymentMethods: Object.freeze(['cash', 'app']), // app = card or mobile money through Paystack
     commissionRate: 0.15,
+    // Documents drivers upload for checking. To confirm with local rules before launch.
+    driverDocuments: Object.freeze(['licence', 'insurance', 'roadworthy', 'car_photo']),
     pricing: Object.freeze({
       baseFare: 500, perKm: 250, perMinute: 30, minimumFare: 1000, avgSpeedKmh: 25, roadFactor: 1.3,
     }),
@@ -21,6 +23,7 @@ export const MARKETS = Object.freeze({
     paymentProvider: 'stripe',
     paymentMethods: Object.freeze(['cash', 'app']), // app = card through Stripe
     commissionRate: 0.15,
+    driverDocuments: Object.freeze(['licence', 'passenger_permit', 'insurance', 'car_photo']),
     pricing: Object.freeze({
       baseFare: 400, perKm: 200, perMinute: 40, minimumFare: 800, avgSpeedKmh: 30, roadFactor: 1.3,
     }),

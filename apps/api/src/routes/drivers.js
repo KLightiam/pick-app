@@ -1,8 +1,24 @@
 import { Router } from 'express';
-import { isValidPoint } from '@pick/shared';
+import express from 'express';
+import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, isValidPoint } from '@pick/shared';
+import { DocumentError } from '../documents/service.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 
-export function driversRouter({ tokens, drivers, routing, payments }) {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Sends an uploaded document so browsers show it but never run it. */
+export function sendFile(res, { bytes, contentType }) {
+  res.set({
+    'Content-Type': contentType,
+    'Content-Disposition': 'inline',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox",
+    'Cache-Control': 'private, no-store',
+  });
+  res.send(bytes);
+}
+
+export function driversRouter({ tokens, drivers, routing, payments, documents }) {
   const router = Router();
 
   // GET /drivers/nearby?lat=..&lng=..&radiusKm=5 -> cars with free seats to show on the rider's map
@@ -26,6 +42,7 @@ export function driversRouter({ tokens, drivers, routing, payments }) {
       if (!driver) return res.status(404).json({ error: 'driver profile not found' });
       await fn(req, res, driver);
     } catch (err) {
+      if (err instanceof DocumentError) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   };
@@ -42,6 +59,30 @@ export function driversRouter({ tokens, drivers, routing, payments }) {
     }
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     res.json(await payments.earnings(req.user.id, { since }));
+  }));
+
+  // GET /drivers/me/documents -> { documents: [{ kind, label, document }] }: what this country asks for, and the latest upload of each
+  router.get('/me/documents', ...driverAuth, withDriver(async (req, res) => {
+    res.json({ documents: await documents.checklistFor(req.user.id, req.user.country) });
+  }));
+
+  // PUT /drivers/me/documents/:kind with the file as the body (Content-Type image/jpeg, image/png, image/heic or application/pdf)
+  router.put(
+    '/me/documents/:kind',
+    ...driverAuth,
+    express.raw({ type: DOCUMENT_TYPES, limit: MAX_DOCUMENT_BYTES }),
+    withDriver(async (req, res) => {
+      const document = await documents.upload(req.user, {
+        kind: req.params.kind, contentType: req.headers['content-type'], bytes: req.body,
+      });
+      res.status(201).json({ document });
+    }),
+  );
+
+  // GET /drivers/me/documents/:id/file -> the driver's own upload
+  router.get('/me/documents/:id/file', ...driverAuth, withDriver(async (req, res) => {
+    if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'Document not found' });
+    sendFile(res, await documents.file(req.user, req.params.id));
   }));
 
   // PUT /drivers/me/vehicle { vehicleMake?, vehiclePlate?, seats } -> seats = passenger seats in the car

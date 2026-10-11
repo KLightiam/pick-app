@@ -9,6 +9,7 @@ import { ActiveTripConflict, NoRoomConflict } from '../src/trips/repo.js';
 import { hasRoom } from '../src/trips/capacity.js';
 import { testProvider } from '../src/payments/providers.js';
 import { createPayments } from '../src/payments/service.js';
+import { createDocuments } from '../src/documents/service.js';
 
 export function memoryOtpStore() {
   const rows = [];
@@ -251,7 +252,35 @@ export function memoryDb() {
     },
   };
 
-  return { users: usersRepo, drivers: driversRepo, trips: tripsRepo, payments: paymentsRepo };
+  const documents = new Map();
+  const documentsRepo = {
+    documents,
+    async create(d) {
+      const row = {
+        id: randomUUID(), ...d, status: 'pending', uploadedAt: new Date(Date.now() + documents.size).toISOString(),
+        reviewedBy: null, reviewedAt: null, rejectReason: null,
+      };
+      documents.set(row.id, row);
+      return copy(row);
+    },
+    async findById(id) {
+      return copy(documents.get(id));
+    },
+    async listForDriver(driverId) {
+      return [...documents.values()].filter((d) => d.driverId === driverId)
+        .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)).map(copy);
+    },
+    async review(id, { status, by, reason }) {
+      const row = documents.get(id);
+      if (row?.status !== 'pending') return null;
+      Object.assign(row, {
+        status, reviewedBy: by, reviewedAt: new Date().toISOString(), rejectReason: status === 'rejected' ? reason : null,
+      });
+      return copy(row);
+    },
+  };
+
+  return { users: usersRepo, drivers: driversRepo, trips: tripsRepo, payments: paymentsRepo, documents: documentsRepo };
 }
 
 /** Records texts instead of sending them; lastCode(phone) reads the code back. */
@@ -282,6 +311,17 @@ export function fakeNotifier() {
   };
 }
 
+/** Keeps uploaded files in memory. */
+export function memoryStorage() {
+  const files = new Map();
+  return {
+    files,
+    async put(key, bytes, contentType) { files.set(key, { bytes: Buffer.from(bytes), contentType }); },
+    async get(key) { return files.get(key) ?? null; },
+    async remove(key) { files.delete(key); },
+  };
+}
+
 /** Finds places from a fixed list; `fail: true` simulates the service being down. */
 export function fakeGeocoder(places = [], { fail = false } = {}) {
   return {
@@ -294,11 +334,13 @@ export function fakeGeocoder(places = [], { fail = false } = {}) {
 
 export function testApp({
   now, dispatchOptions, routing = straightRouter(), geocoder = fakeGeocoder(), providers: customProviders, admin,
+  storage = memoryStorage(),
 } = {}) {
   const sms = fakeSms();
   const store = memoryOtpStore();
   const notifier = fakeNotifier();
-  const { users, drivers, trips, payments: paymentsRepo } = memoryDb();
+  const { users, drivers, trips, payments: paymentsRepo, documents: documentsRepo } = memoryDb();
+  const documents = createDocuments({ repo: documentsRepo, storage });
   const tokens = createTokens({ secret: 'test-secret', expiresIn: '1h' });
   const otp = createOtpService({ store, sms, secret: 'test-secret', now });
   const testCheckout = testProvider({ publicUrl: 'http://pick.test' });
@@ -308,9 +350,10 @@ export function testApp({
   });
   const dispatch = createDispatch({ trips, drivers, users, payments, notifier, options: dispatchOptions });
   const app = createApp({
-    deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, testCheckout, admin },
+    deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, testCheckout, admin, documents },
   });
   return {
     app, sms, store, users, drivers, trips, tokens, notifier, dispatch, routing, payments, paymentsRepo, testCheckout,
+    documents, documentsRepo, storage,
   };
 }
