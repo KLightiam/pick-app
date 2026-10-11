@@ -1,10 +1,10 @@
-import { canTransition, estimateFare, getMarket } from '@pick/shared';
-import { ActiveTripConflict } from './repo.js';
+import { canTransition, getMarket, MATCH_DEFAULTS } from '@pick/shared';
+import { ActiveTripConflict, NoRoomConflict } from './repo.js';
+import { evaluateDriver, findRideOptions } from './options.js';
 
 export const DISPATCH_DEFAULTS = Object.freeze({
-  searchRadiusKm: 5,
-  maxOffers: 5, // offer each request to the 5 nearest drivers; the first to accept gets it
-  offerTimeoutMs: 60_000,
+  offerTimeoutMs: 60_000, // how long the chosen driver has to accept
+  match: MATCH_DEFAULTS,
 });
 
 export class DispatchError extends Error {
@@ -19,19 +19,24 @@ const offerView = (trip) => ({
   id: trip.id,
   pickup: trip.pickup,
   dropoff: trip.dropoff,
+  alight: trip.alight,
   pickupAddress: trip.pickupAddress,
   dropoffAddress: trip.dropoffAddress,
+  rideType: trip.rideType,
+  seats: trip.seats,
+  matchType: trip.matchType,
   fareEstimate: trip.fareEstimate,
   currency: trip.currency,
 });
 
 /**
- * Ride requests: a rider asks for a ride, the nearest drivers get an offer,
- * and the first driver to accept is assigned. Unanswered requests are
- * cancelled after `offerTimeoutMs`.
+ * Ride requests: a passenger looks at the drivers who can take them
+ * (`options`), picks one, and that driver gets the request to accept.
+ * Unanswered requests are cancelled after `offerTimeoutMs` so the passenger
+ * can pick someone else.
  */
 export function createDispatch({ trips, drivers, users, notifier, options = {} }) {
-  const opts = { ...DISPATCH_DEFAULTS, ...options };
+  const opts = { ...DISPATCH_DEFAULTS, ...options, match: { ...MATCH_DEFAULTS, ...options.match } };
   const timers = new Map();
 
   const clearTimer = (tripId) => {
@@ -58,36 +63,44 @@ export function createDispatch({ trips, drivers, users, notifier, options = {} }
   };
 
   return {
-    async requestRide(rider, { pickup, dropoff, pickupAddress, dropoffAddress }) {
-      const market = getMarket(rider.country);
+    /** Drivers who can take this ride, best match first, with prices. */
+    async options(rider, request) {
+      return findRideOptions({ drivers }, rider, request, opts.match);
+    },
+
+    async requestRide(rider, request) {
+      const { driverId, pickup, dropoff, pickupAddress, dropoffAddress, rideType, seats } = request;
       if (await trips.findActiveForRider(rider.id)) {
         throw new DispatchError(409, 'You already have an active trip');
       }
-      const nearby = await drivers.nearby(pickup, { radiusKm: opts.searchRadiusKm, limit: opts.maxOffers });
-      if (nearby.length === 0) throw new DispatchError(409, 'No drivers nearby. Try again in a moment.');
+      const driver = driverId !== rider.id ? await drivers.findById(driverId) : null;
+      const option = driver?.online && driver.approved
+        ? evaluateDriver(driver, request, getMarket(rider.country), opts.match)
+        : null;
+      if (!option) throw new DispatchError(409, 'That driver can no longer take this ride. Please choose another.');
 
-      const { fare } = estimateFare(pickup, dropoff, market.pricing);
       let trip;
       try {
         trip = await trips.create({
-          riderId: rider.id, pickup, dropoff, pickupAddress, dropoffAddress,
-          fareEstimate: fare, currency: market.currency,
+          riderId: rider.id, pickup, dropoff, pickupAddress, dropoffAddress, rideType, seats,
+          alight: option.alight, remainingKm: option.remainingKm,
+          driverMode: option.driverMode, matchType: option.matchType,
+          fareEstimate: option.fare.max, currency: option.fare.currency,
         });
       } catch (err) {
         if (err instanceof ActiveTripConflict) throw new DispatchError(409, 'You already have an active trip');
         throw err;
       }
 
-      const driverIds = nearby.map((d) => d.driverId);
-      await trips.addOffers(trip.id, driverIds);
+      await trips.addOffers(trip.id, [driverId]);
       const expiresAt = new Date(Date.now() + opts.offerTimeoutMs).toISOString();
-      for (const id of driverIds) notifier.toUser(id, 'trip:offer', { trip: offerView(trip), expiresAt });
+      notifier.toUser(driverId, 'trip:offer', { trip: offerView(trip), expiresAt });
 
       const timer = setTimeout(() => expire(trip.id), opts.offerTimeoutMs);
       timer.unref?.();
       timers.set(trip.id, timer);
 
-      return { trip, driversOffered: driverIds.length, expiresAt };
+      return { trip, fare: option.fare, expiresAt };
     },
 
     async accept(driver, tripId) {
@@ -101,7 +114,7 @@ export function createDispatch({ trips, drivers, users, notifier, options = {} }
       try {
         trip = await trips.accept(tripId, driver.id);
       } catch (err) {
-        if (err instanceof ActiveTripConflict) throw new DispatchError(409, 'Finish your current trip first');
+        if (err instanceof NoRoomConflict) throw new DispatchError(409, 'Your car has no room for this booking');
         throw err;
       }
       if (!trip) throw new DispatchError(409, 'This ride is no longer available');
