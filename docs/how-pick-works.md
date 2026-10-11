@@ -100,7 +100,7 @@ These are starting points. Each lives in one place in the code and is easy to ad
 - **Document lists are a first guess.** Ghana: licence, insurance, DVLA roadworthy certificate, car photo. Germany: licence, P-Schein, insurance, car photo. Confirm them, and whether commuters sharing costs need the same papers as taxi-style drivers, before launch. Pick doesn't track expiry dates yet.
 - **Paystack needs an email address for each payment.** Riders sign in by phone, so Pick sends a made-up address based on the account (`rider-<id>@riders.pick.invalid`). Paystack's receipt emails won't reach riders until Pick asks for an email.
 - **A rider could pay twice** if they open two checkout pages and pay on both. Pick counts the ride as paid once; the extra payment would need refunding by hand in Paystack or Stripe for now.
-- **No map in the app yet.** Riders choose places by searching, drivers get a Directions button that opens their maps app, and the rider sees how far away the driver is. A live map can come later.
+- **The live map needs a tile provider before launch.** It uses OpenStreetMap's free tiles, whose rules don't allow apps with many users. Riders still choose places by searching rather than on the map, and drivers still use the Directions button for turn-by-turn navigation.
 - **Push notifications need the app built with EAS.** Ride requests and trip updates reach closed apps once the app has an EAS project and is built with it; in Expo Go and in the browser, people only see updates while the app is open. A ride request is only worth 60 seconds, so its notification is dropped if the phone can't get it in time.
 - **Shared stretches are measured by time, not distance.** Each passenger's fare is spread over their time in the car. That's simple and needs no GPS trail, but a passenger who rides alone through heavy traffic gets a bit less of the shared discount than a distance-based split would give. This could switch to distance along the road later.
 
@@ -127,4 +127,6 @@ These are starting points. Each lives in one place in the code and is easy to ad
 11. ✅ Driver documents: drivers upload them in the app, admins check them in the dashboard
 12. ✅ Automatic payouts to drivers: mobile money through Paystack in Ghana, bank through Stripe Connect in Germany, every week or on Pay now
 13. ✅ Push notifications: ride requests for drivers and trip updates for riders when the app is closed
-14. A live map: the driver's car on a map for the rider, and the route for the driver
+14. ✅ A live map: the driver's car on a map for the rider, and the next stops and route for the driver
+15. Ratings and safety: riders and drivers rate each other, riders share their trip with someone, and either can report a problem
+16. Getting ready to launch: real Paystack, Stripe, Twilio and storage accounts, a map tile provider, EAS builds and the app store listings

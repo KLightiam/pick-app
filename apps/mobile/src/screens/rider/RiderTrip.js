@@ -4,6 +4,8 @@ import { distanceKm } from '@pick/shared';
 import { api } from '../../api-instance.js';
 import { CANCELLABLE, TRIP_STATUS_LABELS, describePayment, formatKm, formatMoney } from '../../format.js';
 import { useLiveEvent } from '../../live.js';
+import LiveMap from '../../map/LiveMap.js';
+import { riderScene } from '../../map/scene.js';
 import { Body, Button, Card, ErrorText, Screen, Title } from '../../ui.js';
 
 /** A booked ride as it happens: waiting for the driver, on the way, and the final fare. */
@@ -87,6 +89,7 @@ export default function RiderTrip({ booking, live, onDone }) {
       {trip.status === 'requested' && (
         <Body muted>If the driver doesn't accept within a minute, you can choose someone else.</Body>
       )}
+      {!finished && <LiveMap scene={riderScene(trip, driverAt)} height={200} />}
       {driver && (
         <Card>
           <Body style={{ fontWeight: '600' }}>{driver.name ?? 'Your driver'}</Body>
