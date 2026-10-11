@@ -16,6 +16,7 @@ export function attachRealtime(httpServer, { corsOrigin, tokens }) {
 
   io.on('connection', (socket) => {
     const { user } = socket.data;
+    socket.join(`user:${user.id}`); // for events sent to this user, see notifier.js
 
     socket.on('driver:location', async ({ lat, lng, tripId } = {}) => {
       if (user.role !== 'driver' || !isValidPoint({ lat, lng })) return;

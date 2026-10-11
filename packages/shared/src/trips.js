@@ -7,6 +7,9 @@ export const TRIP_STATUS = Object.freeze({
   CANCELLED: 'cancelled',
 });
 
+/** Statuses in which a trip still ties up its rider (and driver, once assigned). */
+export const ACTIVE_TRIP_STATUSES = Object.freeze(['requested', 'accepted', 'arrived', 'in_progress']);
+
 // Which status each status may move to next.
 const NEXT = {
   requested: ['accepted', 'cancelled'],
