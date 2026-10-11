@@ -7,6 +7,7 @@ import { connectLive } from './src/live.js';
 import { clearToken, loadToken } from './src/session.js';
 import { registerForPush, unregisterPush } from './src/push.js';
 import { Body, Button, Screen, colors, styles } from './src/ui.js';
+import Account from './src/screens/Account.js';
 import SignIn from './src/screens/SignIn.js';
 import RiderHome from './src/screens/rider/RiderHome.js';
 import DriverHome from './src/screens/driver/DriverHome.js';
@@ -16,6 +17,7 @@ export default function App() {
   const [user, setUser] = useState(undefined); // undefined while loading, null when signed out
   const [live, setLive] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  const [showAccount, setShowAccount] = useState(false);
 
   const loadUser = async () => {
     setLoadError(null);
@@ -48,6 +50,13 @@ export default function App() {
   const signOut = async () => {
     await unregisterPush(api);
     await clearToken();
+    setShowAccount(false);
+    setUser(null);
+  };
+  // The server already removed the push token with the account.
+  const deleted = async () => {
+    await clearToken();
+    setShowAccount(false);
     setUser(null);
   };
 
@@ -68,11 +77,17 @@ export default function App() {
             <View style={{ flex: 1 }}>
               <View style={[styles.row, { paddingHorizontal: 20, paddingTop: 8 }]}>
                 <Text style={[styles.body, { fontWeight: '700', color: colors.brand }]}>Pick</Text>
-                <Pressable accessibilityRole="button" onPress={signOut}>
-                  <Text style={styles.muted}>Sign out</Text>
+                <Pressable accessibilityRole="button" onPress={() => setShowAccount((s) => !s)}>
+                  <Text style={styles.muted}>{showAccount ? 'Close' : 'Account'}</Text>
                 </Pressable>
               </View>
-              {user.role === 'driver' ? <DriverHome live={live} /> : <RiderHome user={user} live={live} />}
+              {showAccount && (
+                <Account user={user} onSignOut={signOut} onDeleted={deleted} onBack={() => setShowAccount(false)} />
+              )}
+              {/* Kept mounted under the account screen, so a trip in progress isn't lost */}
+              <View style={{ flex: 1, display: showAccount ? 'none' : 'flex' }}>
+                {user.role === 'driver' ? <DriverHome live={live} /> : <RiderHome user={user} live={live} />}
+              </View>
             </View>
           )}
         </SafeAreaView>

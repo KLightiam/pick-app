@@ -59,3 +59,8 @@ export function formatRating(rating) {
   if (!rating?.count) return 'No ratings';
   return `${rating.average.toFixed(1)} ★ (${rating.count})`;
 }
+
+/** A person's number, or that they deleted their account (the API keeps their trips without it). */
+export function phoneLabel(phone) {
+  return phone?.startsWith('deleted:') ? 'Deleted account' : phone;
+}

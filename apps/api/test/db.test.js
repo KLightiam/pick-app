@@ -22,14 +22,14 @@ before(async () => {
     { pgUsersRepo }, { pgDriversRepo }, { pgTripsRepo }, { createDispatch },
     { pgPaymentsRepo }, { testProvider }, { createPayments }, { pgAdminRepo },
     { pgDocumentsRepo }, { createDocuments }, { pgPayoutsRepo }, { createPayouts }, { pgPushTokensRepo },
-    { pgSafetyRepo }, { createSafety }] = await Promise.all([
+    { pgSafetyRepo }, { createSafety }, { createAccounts }] = await Promise.all([
     import('../src/db/pool.js'), import('../src/app.js'), import('../src/auth/otp.js'),
     import('../src/auth/otpStore.js'), import('../src/auth/tokens.js'), import('../src/users/repo.js'),
     import('../src/drivers/repo.js'), import('../src/trips/repo.js'), import('../src/trips/dispatch.js'),
     import('../src/payments/repo.js'), import('../src/payments/providers.js'), import('../src/payments/service.js'),
     import('../src/admin/repo.js'), import('../src/documents/repo.js'), import('../src/documents/service.js'),
     import('../src/payouts/repo.js'), import('../src/payouts/service.js'), import('../src/push/repo.js'),
-    import('../src/safety/repo.js'), import('../src/safety/service.js'),
+    import('../src/safety/repo.js'), import('../src/safety/service.js'), import('../src/accounts/service.js'),
   ]);
   db = pool;
   await db().query('TRUNCATE users, otp_codes CASCADE');
@@ -52,16 +52,18 @@ before(async () => {
   safetyRepo = pgSafetyRepo(db);
   const safety = createSafety({ repo: safetyRepo, trips, drivers, publicUrl: 'http://pick.test' });
   const dispatch = createDispatch({ trips, drivers, users, payments, notifier });
+  const storage = memoryStorage();
+  const accounts = createAccounts({ users, trips, payments, balances: paymentsRepo, storage });
   // Road routes go through a midpoint 5 km east of the start (see `at` below)
   const routing = { route: async (from, to) => ({ points: [from, { lat: 5.6, lng: -0.25 + 5 / 110.6 }, to] }) };
   ctx = {
     app: createApp({
       deps: {
-        otp, users, tokens, drivers, trips, dispatch, routing, payments, payouts, pushTokens, safety, testCheckout, admin: pgAdminRepo(db),
-        documents: createDocuments({ repo: pgDocumentsRepo(db), storage: memoryStorage() }),
+        otp, users, tokens, drivers, trips, dispatch, routing, payments, payouts, pushTokens, safety, accounts, testCheckout, admin: pgAdminRepo(db),
+        documents: createDocuments({ repo: pgDocumentsRepo(db), storage }),
       },
     }),
-    sms, notifier, dispatch, tokens, testCheckout, payouts,
+    sms, notifier, dispatch, tokens, testCheckout, payouts, storage,
   };
 });
 
@@ -307,4 +309,26 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   // Going offline (Yaw was suspended above) hides the driver but keeps their last location
   const { rows } = await db().query('SELECT online, location IS NOT NULL AS has FROM drivers WHERE user_id = $1', [yaw.id]);
   assert.deepEqual(rows[0], { online: false, has: true });
+
+  // Kofi has been paid everything, so he can delete his account: his licence, MoMo number and car go, his trips stay
+  assert.equal(ctx.storage.files.size, 2);
+  await request(ctx.app).delete('/auth/me').set('Authorization', kofi.auth).expect(204);
+  await request(ctx.app).get('/auth/me').set('Authorization', kofi.auth).expect(401);
+  assert.equal(ctx.storage.files.size, 0);
+  const { rows: [gone] } = await db().query(
+    `SELECT u.phone, u.name, u.deleted_at IS NOT NULL AS deleted, d.vehicle_plate, d.approved,
+            (SELECT count(*)::int FROM driver_documents WHERE driver_id = u.id) AS docs,
+            (SELECT count(*)::int FROM payout_accounts WHERE driver_id = u.id) AS accounts,
+            (SELECT comment FROM ratings WHERE from_user = u.id) AS comment,
+            (SELECT count(*)::int FROM trips WHERE driver_id = u.id) AS trips
+       FROM users u JOIN drivers d ON d.user_id = u.id WHERE u.id = $1`,
+    [kofi.id],
+  );
+  assert.deepEqual(gone, {
+    phone: `deleted:${kofi.id}`, name: null, deleted: true, vehicle_plate: null, approved: false, docs: 0, accounts: 0,
+    comment: null, trips: 2,
+  });
+  assert.ok(!(await adminGet('/admin/drivers?status=all')).body.drivers.some((d) => d.id === kofi.id));
+  // A new account can use the same number
+  await signUp(kofi.phone, 'rider', 'Kofi again');
 });

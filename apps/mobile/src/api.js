@@ -40,6 +40,7 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
     requestCode: (phone) => call('POST', '/auth/code', { phone }),
     verify: ({ phone, code, role, name }) => call('POST', '/auth/verify', { phone, code, role, name }),
     me: () => call('GET', '/auth/me'),
+    deleteAccount: () => call('DELETE', '/auth/me'),
     registerPushToken: (token, platform) => call('PUT', '/auth/push-token', { token, platform }),
     unregisterPushToken: (token) => call('DELETE', '/auth/push-token', { token }),
 

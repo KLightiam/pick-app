@@ -13,6 +13,7 @@ import { createDocuments } from '../src/documents/service.js';
 import { createPayouts } from '../src/payouts/service.js';
 import { withPush } from '../src/push/notifier.js';
 import { createSafety } from '../src/safety/service.js';
+import { createAccounts } from '../src/accounts/service.js';
 
 export function memoryOtpStore() {
   const rows = [];
@@ -63,7 +64,24 @@ export function memoryDb() {
       return users.find((u) => u.phone === phone) ?? null;
     },
     async findById(id) {
-      return users.find((u) => u.id === id) ?? null;
+      return users.find((u) => u.id === id && !u.deletedAt) ?? null;
+    },
+    async deleteAccount(id) {
+      const user = users.find((u) => u.id === id && !u.deletedAt);
+      if (!user) return null;
+      const docs = [...documents.values()].filter((d) => d.driverId === id);
+      for (const d of docs) documents.delete(d.id);
+      payoutAccounts.delete(id);
+      for (const r of ratings) if (r.fromUser === id) r.comment = null;
+      const driver = drivers.get(id);
+      if (driver) {
+        Object.assign(driver, {
+          online: false, approved: false, vehicleMake: null, vehiclePlate: null, location: null, mode: 'anywhere',
+          destination: null, destinationAddress: null, route: null,
+        });
+      }
+      Object.assign(user, { phone: `deleted:${id}`, name: null, deletedAt: new Date().toISOString() });
+      return { documentKeys: docs.map((d) => d.storageKey) };
     },
     async create({ phone, country, role, name }) {
       const user = { id: randomUUID(), phone, country, role, name: name ?? null };
@@ -503,10 +521,11 @@ export function testApp({
     repo: payoutsRepo, balances: paymentsRepo, providers, notifier, publicUrl: 'http://pick.test', now: payoutsNow,
   });
   const dispatch = createDispatch({ trips, drivers, users, payments, notifier, options: dispatchOptions });
+  const accounts = createAccounts({ users, trips, payments, balances: paymentsRepo, storage });
   const app = createApp({
     deps: {
       otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, testCheckout, admin, documents,
-      pushTokens, safety,
+      pushTokens, safety, accounts,
     },
   });
   return {
