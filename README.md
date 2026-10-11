@@ -2,13 +2,14 @@
 
 Ride sharing for Ghana and Germany: commuters share empty seats with passengers going their way, alongside go-anywhere drivers. See [How Pick works](docs/how-pick-works.md) for the matching and pricing rules.
 
-Pick has one mobile app for riders and drivers (React Native with Expo) and a Node.js + Express API. An admin dashboard (React) comes later.
+Pick has one mobile app for riders and drivers (React Native with Expo), an admin dashboard (React + Vite) and a Node.js + Express API.
 
 ## Layout
 
 ```
 apps/api         Express API + Socket.io live updates
 apps/mobile      The Pick app for riders and drivers (Expo, also runs in a browser)
+apps/admin       Admin dashboard: driver approval, trips, money to settle (React + Vite)
 packages/shared  Code shared by every app (fare estimates, trip statuses, geo helpers)
 db/migrations    PostgreSQL + PostGIS schema
 ```
@@ -53,7 +54,13 @@ pnpm test
 | GET | `/places/search?q=&lat=&lng=` | Address search in the user's country, nearest first: `{ places: [{ name, address, location }] }` |
 | GET | `/drivers/nearby?lat=&lng=&radiusKm=` | Available drivers closest to a point |
 | GET | `/drivers/me` | The driver's profile, mode, route and current load |
-| GET | `/drivers/me/earnings?days=7` | Rides with what the driver earned, and their balance with Pick |
+| GET | `/drivers/me/earnings?days=7` | Rides with what the driver earned, and their balance with Pick (all time) |
+| GET | `/admin/overview?days=&country=` | Admins: drivers, riders, trips and money for the period |
+| GET | `/admin/drivers?status=&q=&country=` | Admins: drivers waiting for approval, approved, or all, with rides and balance |
+| POST | `/admin/drivers/:id/approval` | Admins: `{ approved }` approves a driver, or suspends them and takes them offline |
+| GET | `/admin/trips?status=&country=&before=` | Admins: trips newest first, 50 at a time, with rider, driver and payment |
+| GET | `/admin/balances?country=` | Admins: drivers with money to settle |
+| GET, POST | `/admin/settlements` | Admins: money paid to or received from a driver outside the app `{ driverId, direction, amount, reference?, note? }` |
 | PUT | `/drivers/me/vehicle` | `{ vehicleMake?, vehiclePlate?, seats }` |
 | POST | `/drivers/me/status` | Go online `{ online: true, location, mode, destination?, destinationAddress?, seatsOffered? }` or offline `{ online: false }` |
 
@@ -88,6 +95,20 @@ Scan the QR code with Expo Go on your phone (it must be on the same Wi-Fi), or p
 With `SMS_PROVIDER=console`, sign-in codes are printed in the API terminal. New driver accounts need approving before they can go online: `pnpm --filter @pick/api approve-driver +233241234567`.
 
 `pnpm --filter @pick/mobile build:web` builds the browser version into `apps/mobile/dist`.
+
+## Admin dashboard
+
+```sh
+pnpm --filter @pick/api make-admin +233241234567 "Your name"   # once, for each admin
+pnpm --filter @pick/admin dev                                   # http://localhost:5173
+```
+
+Admins sign in with their phone number and the texted code, like everyone else; only numbers made admin with `make-admin` get in. Set `VITE_API_URL` if the API isn't at `http://localhost:4000`, and add the dashboard's address to the API's `CORS_ORIGIN` in production.
+
+- **Overview:** drivers waiting for approval and online, riders, trips by status, fares, commission, and app payments not made yet, for today, 7 or 30 days, by country.
+- **Drivers:** approve new drivers once their car is added, suspend drivers (they go offline at once), search by name, phone or plate.
+- **Trips:** every trip with rider, driver, route, fare, payment and who cancelled.
+- **Money:** each driver's balance with Pick. Pick owes drivers what app riders paid (minus commission) and drivers owe Pick commission on cash rides. Send the money by MoMo or bank transfer and record it here with its reference.
 
 ## Payments
 
