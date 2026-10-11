@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../session.js';
 import { useLoad } from '../useLoad.js';
 import { describeBalance, formatDateTime } from '../format.js';
+import DriverDocuments from './DriverDocuments.jsx';
 
 const FILTERS = [{ value: 'pending', label: 'Waiting for approval' }, { value: 'approved', label: 'Approved' }, { value: 'all', label: 'All' }];
 
@@ -11,6 +12,7 @@ export default function Drivers({ country }) {
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [documentsFor, setDocumentsFor] = useState(null);
   const { data, error, reload } = useLoad(() => api.drivers({ status, q: search, country }), [status, search, country]);
 
   const setApproval = async (driver, approved) => {
@@ -47,7 +49,7 @@ export default function Drivers({ country }) {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Driver</th><th>Car</th><th>Joined</th><th>Rides</th><th>Balance</th><th>Status</th><th /></tr>
+              <tr><th>Driver</th><th>Car</th><th>Documents</th><th>Joined</th><th>Rides</th><th>Balance</th><th>Status</th><th /></tr>
             </thead>
             <tbody>
               {data.drivers.map((d) => (
@@ -55,6 +57,12 @@ export default function Drivers({ country }) {
                   <td><strong>{d.name ?? 'No name'}</strong><div className="muted">{d.phone} · {d.country}</div></td>
                   <td>{[d.vehicleMake, d.vehiclePlate].filter(Boolean).join(' · ') || <span className="muted">Not added</span>}
                     <div className="muted">{d.seats} seats</div></td>
+                  <td>
+                    <button className="link-strong" onClick={() => setDocumentsFor(d)}>
+                      {d.documentsApproved} of {d.documentsRequired} approved
+                    </button>
+                    {d.documentsPending > 0 && <div><span className="pill warn">{d.documentsPending} to check</span></div>}
+                  </td>
                   <td>{formatDateTime(d.joinedAt)}</td>
                   <td>{d.rides}</td>
                   <td>{d.currency ? describeBalance(d.balance, d.currency) : '—'}</td>
@@ -71,7 +79,8 @@ export default function Drivers({ country }) {
           </table>
         </div>
       )}
-      <p className="muted small">Check each driver's licence, insurance and car in person or from their documents before approving. Document upload comes later.</p>
+      {documentsFor && <DriverDocuments driver={documentsFor} onClose={() => setDocumentsFor(null)} onChanged={reload} />}
+      <p className="muted small">Approve a driver once their documents are approved. Drivers upload them in the app.</p>
     </section>
   );
 }

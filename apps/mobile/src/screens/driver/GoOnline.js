@@ -3,6 +3,7 @@ import { ScrollView } from 'react-native';
 import { api } from '../../api-instance.js';
 import PlaceSearch from '../../components/PlaceSearch.js';
 import Earnings from '../../components/Earnings.js';
+import Documents from '../../components/Documents.js';
 import { getCurrentLocation } from '../../location.js';
 import { Body, Button, Choice, ErrorText, Stepper, Title } from '../../ui.js';
 
@@ -46,7 +47,10 @@ export default function GoOnline({ driver, onOnline, onEditCar }) {
     <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }} keyboardShouldPersistTaps="handled">
       <Title>Ready to drive?</Title>
       {!driver.approved && (
-        <Body>Your driver account is waiting for approval. You can go online once Pick has checked your details.</Body>
+        <>
+          <Body>Your driver account is waiting for approval. Upload your documents below, and you can go online once Pick has checked them.</Body>
+          <Documents />
+        </>
       )}
       <Choice options={MODES} value={mode} onChange={setMode} />
       <Body muted>
@@ -72,6 +76,7 @@ export default function GoOnline({ driver, onOnline, onEditCar }) {
       <Button title={`Your car: ${[driver.vehicleMake, driver.vehiclePlate].filter(Boolean).join(' · ') || 'add details'}`} variant="secondary" onPress={onEditCar} />
       <ErrorText>{error}</ErrorText>
       <Earnings />
+      {driver.approved && <Documents />}
     </ScrollView>
   );
 }

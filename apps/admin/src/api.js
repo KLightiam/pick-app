@@ -47,5 +47,15 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
     balances: ({ country }) => call('GET', `/admin/balances${query({ country })}`),
     settlements: ({ driverId } = {}) => call('GET', `/admin/settlements${query({ driverId })}`),
     recordSettlement: (s) => call('POST', '/admin/settlements', s),
+    driverDocuments: (driverId) => call('GET', `/admin/drivers/${driverId}/documents`),
+    reviewDocument: (id, status, reason) => call('POST', `/admin/documents/${id}/review`, { status, reason }),
+    /** The uploaded file as a Blob (it needs the sign-in header, so it can't be a plain link). */
+    async documentFile(id) {
+      const res = await fetchFn(`${baseUrl}/admin/documents/${id}/file`, {
+        headers: { Authorization: `Bearer ${getToken?.()}` },
+      });
+      if (!res.ok) throw new ApiError(res.status, 'Could not load the document');
+      return res.blob();
+    },
   };
 }

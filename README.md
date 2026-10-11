@@ -58,10 +58,15 @@ pnpm test
 | GET | `/admin/overview?days=&country=` | Admins: drivers, riders, trips and money for the period |
 | GET | `/admin/drivers?status=&q=&country=` | Admins: drivers waiting for approval, approved, or all, with rides and balance |
 | POST | `/admin/drivers/:id/approval` | Admins: `{ approved }` approves a driver, or suspends them and takes them offline |
+| GET | `/admin/drivers/:id/documents` | Admins: a driver's document checklist and every upload |
+| GET | `/admin/documents/:id/file` | Admins: the uploaded photo or PDF |
+| POST | `/admin/documents/:id/review` | Admins: `{ status: 'approved' }`, or `{ status: 'rejected', reason }` which the driver sees |
 | GET | `/admin/trips?status=&country=&before=` | Admins: trips newest first, 50 at a time, with rider, driver and payment |
 | GET | `/admin/balances?country=` | Admins: drivers with money to settle |
 | GET, POST | `/admin/settlements` | Admins: money paid to or received from a driver outside the app `{ driverId, direction, amount, reference?, note? }` |
 | PUT | `/drivers/me/vehicle` | `{ vehicleMake?, vehiclePlate?, seats }` |
+| GET | `/drivers/me/documents` | The documents the driver's country asks for, each with its latest upload and status |
+| PUT | `/drivers/me/documents/:kind` | Upload a document: the photo (JPEG, PNG, HEIC) or PDF is the request body, up to 8 MB |
 | POST | `/drivers/me/status` | Go online `{ online: true, location, mode, destination?, destinationAddress?, seatsOffered? }` or offline `{ online: false }` |
 
 Socket.io connections must sign in with `io(url, { auth: { token } })`.
@@ -114,9 +119,15 @@ pnpm --filter @pick/admin dev                                   # http://localho
 Admins sign in with their phone number and the texted code, like everyone else; only numbers made admin with `make-admin` get in. Set `VITE_API_URL` if the API isn't at `http://localhost:4000`, and add the dashboard's address to the API's `CORS_ORIGIN` in production.
 
 - **Overview:** drivers waiting for approval and online, riders, trips by status, fares, commission, and app payments not made yet, for today, 7 or 30 days, by country.
-- **Drivers:** approve new drivers once their car is added, suspend drivers (they go offline at once), search by name, phone or plate.
+- **Drivers:** check each driver's documents (view, approve, or reject with a reason the driver sees in the app), approve new drivers, suspend drivers (they go offline at once), search by name, phone or plate.
 - **Trips:** every trip with rider, driver, route, fare, payment and who cancelled.
 - **Money:** each driver's balance with Pick. Pick owes drivers what app riders paid (minus commission) and drivers owe Pick commission on cash rides. Send the money by MoMo or bank transfer and record it here with its reference.
+
+## Driver documents
+
+Drivers photograph their documents in the app; admins check them in the dashboard. Ghana asks for a driver's licence, car insurance, a DVLA roadworthy certificate and a photo of the car; Germany asks for a licence, a passenger transport permit (P-Schein), insurance and a photo of the car. The lists are in `packages/shared/src/markets.js` and should be confirmed against local rules before launch.
+
+Files go to a private S3-compatible bucket (AWS S3, Cloudflare R2, MinIO) set with `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT` and the usual `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. Without a bucket, outside production, they're kept in `apps/api/uploads`. Files are only ever served through the API, to the driver who uploaded them and to admins.
 
 ## Payments
 

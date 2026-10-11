@@ -3,7 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
-import { fakeNotifier, fakeSms } from './helpers.js';
+import { fakeNotifier, fakeSms, memoryStorage } from './helpers.js';
 
 const url = process.env.TEST_DATABASE_URL;
 const opts = { skip: url ? false : 'set TEST_DATABASE_URL to run database tests' };
@@ -17,12 +17,13 @@ before(async () => {
   process.env.DATABASE_URL = url;
   const [{ db: pool }, { createApp }, { createOtpService }, { pgOtpStore }, { createTokens },
     { pgUsersRepo }, { pgDriversRepo }, { pgTripsRepo }, { createDispatch },
-    { pgPaymentsRepo }, { testProvider }, { createPayments }, { pgAdminRepo }] = await Promise.all([
+    { pgPaymentsRepo }, { testProvider }, { createPayments }, { pgAdminRepo },
+    { pgDocumentsRepo }, { createDocuments }] = await Promise.all([
     import('../src/db/pool.js'), import('../src/app.js'), import('../src/auth/otp.js'),
     import('../src/auth/otpStore.js'), import('../src/auth/tokens.js'), import('../src/users/repo.js'),
     import('../src/drivers/repo.js'), import('../src/trips/repo.js'), import('../src/trips/dispatch.js'),
     import('../src/payments/repo.js'), import('../src/payments/providers.js'), import('../src/payments/service.js'),
-    import('../src/admin/repo.js'),
+    import('../src/admin/repo.js'), import('../src/documents/repo.js'), import('../src/documents/service.js'),
   ]);
   db = pool;
   await db().query('TRUNCATE users, otp_codes CASCADE');
@@ -43,7 +44,10 @@ before(async () => {
   const routing = { route: async (from, to) => ({ points: [from, { lat: 5.6, lng: -0.25 + 5 / 110.6 }, to] }) };
   ctx = {
     app: createApp({
-      deps: { otp, users, tokens, drivers, trips, dispatch, routing, payments, testCheckout, admin: pgAdminRepo(db) },
+      deps: {
+        otp, users, tokens, drivers, trips, dispatch, routing, payments, testCheckout, admin: pgAdminRepo(db),
+        documents: createDocuments({ repo: pgDocumentsRepo(db), storage: memoryStorage() }),
+      },
     }),
     sms, notifier, dispatch, tokens,
   };
@@ -185,7 +189,24 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   assert.equal(listed[0].driver.name, 'Kofi');
   assert.equal(listed[0].paymentStatus, 'paid');
   assert.equal((await adminGet('/admin/trips?country=DE')).body.trips.length, 0);
+  // Kofi uploads his licence twice; the admin rejects the first and approves the second
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 7)]);
+  const uploadLicence = async () => (await request(ctx.app).put('/drivers/me/documents/licence')
+    .set('Authorization', kofi.auth).set('Content-Type', 'image/jpeg').send(jpeg).expect(201)).body.document;
+  const darkLicence = await uploadLicence();
+  await request(ctx.app).post(`/admin/documents/${darkLicence.id}/review`).set('Authorization', adminAuth)
+    .send({ status: 'rejected', reason: 'Too dark' }).expect(200);
+  const clearLicence = await uploadLicence();
+  await request(ctx.app).post(`/admin/documents/${clearLicence.id}/review`).set('Authorization', adminAuth)
+    .send({ status: 'approved' }).expect(200);
+  const kofiDocs = (await adminGet(`/admin/drivers/${kofi.id}/documents`)).body;
+  assert.equal(kofiDocs.checklist[0].document.status, 'approved');
+  assert.deepEqual(kofiDocs.history.map((d) => d.status), ['approved', 'rejected']);
+  const file = await request(ctx.app).get(`/admin/documents/${darkLicence.id}/file`).set('Authorization', adminAuth).expect(200);
+  assert.ok(Buffer.from(file.body).equals(jpeg));
+
   const searched = (await adminGet('/admin/drivers?q=GR%201234')).body.drivers;
+  assert.deepEqual([searched[0].documentsApproved, searched[0].documentsPending, searched[0].documentsRequired], [1, 0, 4]);
   assert.deepEqual(searched.map((d) => [d.name, d.rides, d.balance]), [['Kofi', 1, earnings.body.balance.balance]]);
 
   // Pick pays Kofi what Esi paid in the app: his balance goes to zero

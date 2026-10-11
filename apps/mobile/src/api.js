@@ -8,7 +8,8 @@ export class ApiError extends Error {
 }
 
 export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...args) }) {
-  async function call(method, path, body) {
+  // `raw` sends a file as-is: { body, contentType }.
+  async function call(method, path, body, raw) {
     const token = await getToken?.();
     let res;
     try {
@@ -16,9 +17,10 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
         method,
         headers: {
           ...(body !== undefined && { 'Content-Type': 'application/json' }),
+          ...(raw && { 'Content-Type': raw.contentType }),
           ...(token && { Authorization: `Bearer ${token}` }),
         },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body: raw ? raw.body : body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch {
       throw new ApiError(0, "Can't reach Pick. Check your internet connection.");
@@ -63,5 +65,7 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
     updateVehicle: (vehicle) => call('PUT', '/drivers/me/vehicle', vehicle),
     setDriverStatus: (status) => call('POST', '/drivers/me/status', status),
     earnings: (days = 7) => call('GET', `/drivers/me/earnings?days=${days}`),
+    documents: () => call('GET', '/drivers/me/documents'),
+    uploadDocument: (kind, file, contentType) => call('PUT', `/drivers/me/documents/${kind}`, undefined, { body: file, contentType }),
   };
 }

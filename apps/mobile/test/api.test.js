@@ -95,3 +95,15 @@ test('payment calls hit the right paths', async () => {
     'POST /trips/t1/pay', 'GET /trips/t1/payment', 'GET /payments/unpaid', 'GET /drivers/me/earnings?days=30',
   ]);
 });
+
+test('document uploads send the file as-is with its type', async () => {
+  const { calls, fetchFn } = recorder(json(201, { document: {} }));
+  const api = createApi({ baseUrl: 'http://api', getToken: async () => 'tok', fetchFn });
+  const file = new Uint8Array([0xff, 0xd8, 0xff]);
+  await api.uploadDocument('licence', file, 'image/jpeg');
+  assert.equal(calls[0].method, 'PUT');
+  assert.equal(calls[0].url, 'http://api/drivers/me/documents/licence');
+  assert.equal(calls[0].headers['Content-Type'], 'image/jpeg');
+  assert.equal(calls[0].headers.Authorization, 'Bearer tok');
+  assert.equal(calls[0].body, file);
+});

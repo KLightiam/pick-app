@@ -6,3 +6,4 @@ export * from './route.js';
 export * from './matching.js';
 export * from './pricing.js';
 export * from './payments.js';
+export * from './documents.js';
