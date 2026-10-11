@@ -67,5 +67,7 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
     earnings: (days = 7) => call('GET', `/drivers/me/earnings?days=${days}`),
     documents: () => call('GET', '/drivers/me/documents'),
     uploadDocument: (kind, file, contentType) => call('PUT', `/drivers/me/documents/${kind}`, undefined, { body: file, contentType }),
+    payouts: () => call('GET', '/drivers/me/payouts'),
+    setupPayouts: (details) => call('PUT', '/drivers/me/payout-account', details),
   };
 }

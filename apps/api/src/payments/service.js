@@ -81,12 +81,17 @@ export function createPayments({ repo, providers, notifier, publicUrl, emailDoma
       return payment;
     },
 
-    /** A provider's webhook. Throws WebhookSignatureError if it isn't genuine. */
-    async handleWebhook(providerName, rawBody, headers) {
+    /**
+     * A provider's webhook. Throws WebhookSignatureError if it isn't genuine.
+     * Confirms rider payments itself; payout events (Paystack transfers) go to onPayout.
+     */
+    async handleWebhook(providerName, rawBody, headers, { onPayout } = {}) {
       const provider = providers[providerName];
       if (!provider || provider.name !== providerName) return null;
       const event = provider.parseWebhook(rawBody, headers);
-      return event ? confirm(event.paymentId, event) : null;
+      if (event?.kind === 'payment') return confirm(event.paymentId, event);
+      if (event?.kind === 'payout') return onPayout?.(event) ?? null;
+      return null;
     },
 
     /** The test checkout page's Pay button. */

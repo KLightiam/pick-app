@@ -64,9 +64,13 @@ pnpm test
 | GET | `/admin/trips?status=&country=&before=` | Admins: trips newest first, 50 at a time, with rider, driver and payment |
 | GET | `/admin/balances?country=` | Admins: drivers with money to settle |
 | GET, POST | `/admin/settlements` | Admins: money paid to or received from a driver outside the app `{ driverId, direction, amount, reference?, note? }` |
+| GET | `/admin/payouts?status=&country=` | Admins: payouts sent to drivers, newest first |
+| POST | `/admin/drivers/:id/payout` | Admins: Pay now, sending the driver their whole balance |
 | PUT | `/drivers/me/vehicle` | `{ vehicleMake?, vehiclePlate?, seats }` |
 | GET | `/drivers/me/documents` | The documents the driver's country asks for, each with its latest upload and status |
 | PUT | `/drivers/me/documents/:kind` | Upload a document: the photo (JPEG, PNG, HEIC) or PDF is the request body, up to 8 MB |
+| GET | `/drivers/me/payouts` | Where the driver is paid, how often, and past payouts |
+| PUT | `/drivers/me/payout-account` | Ghana: `{ name, number, network: 'MTN' \| 'VOD' \| 'ATL' }`. Germany: `{}` returns `onboardingUrl`, Stripe's sign-up page |
 | POST | `/drivers/me/status` | Go online `{ online: true, location, mode, destination?, destinationAddress?, seatsOffered? }` or offline `{ online: false }` |
 
 Socket.io connections must sign in with `io(url, { auth: { token } })`.
@@ -121,7 +125,7 @@ Admins sign in with their phone number and the texted code, like everyone else; 
 - **Overview:** drivers waiting for approval and online, riders, trips by status, fares, commission, and app payments not made yet, for today, 7 or 30 days, by country.
 - **Drivers:** check each driver's documents (view, approve, or reject with a reason the driver sees in the app), approve new drivers, suspend drivers (they go offline at once), search by name, phone or plate.
 - **Trips:** every trip with rider, driver, route, fare, payment and who cancelled.
-- **Money:** each driver's balance with Pick. Pick owes drivers what app riders paid (minus commission) and drivers owe Pick commission on cash rides. Send the money by MoMo or bank transfer and record it here with its reference.
+- **Money:** each driver's balance with Pick. Pick owes drivers what app riders paid (minus commission) and drivers owe Pick commission on cash rides. Drivers with a payout account are paid every week by themselves; Pay now sends a driver's balance at once. Every payout is listed with its outcome, and money that changes hands any other way can be recorded with its reference.
 
 ## Driver documents
 
@@ -138,6 +142,15 @@ Riders pay after the drop-off, in cash or in the app. App payments open Paystack
 - `PUBLIC_URL`: where phones and the payment providers reach the API.
 
 Use the providers' test keys while developing. With no keys at all, app payments open a test checkout page on the API itself with a Pay button, so the whole flow works locally. The API refuses to start in production without keys.
+
+## Driver payouts
+
+Pick pays drivers what it owes them every week, once it's at least GHS 20 or EUR 10 (`payout` in `packages/shared/src/markets.js`). The API checks every hour and pays each driver at most once a week; set `AUTO_PAYOUTS=off` to pay only when an admin presses Pay now. Drivers with a negative balance (commission owed on cash rides) and suspended drivers aren't paid automatically.
+
+- **Ghana:** drivers add their MTN MoMo, Telecel Cash or AirtelTigo Money number in the app, and Pick sends Paystack transfers from its Paystack balance. In the Paystack dashboard, turn off OTP for transfers (otherwise every transfer waits for a code) and keep the balance topped up. Paystack's `transfer.success`, `transfer.failed` and `transfer.reversed` events arrive on the same webhook URL as payments.
+- **Germany:** drivers tap Set up payouts and give their ID and bank details on Stripe's own page (Stripe Connect Express). Pick transfers their earnings to that Stripe account and Stripe pays it out to their bank. Connect must be turned on in the Stripe dashboard.
+
+A payout counts against the driver's balance while it's on its way, so the same money is never sent twice, and a failed one puts it back. If Pick never hears how a transfer went, the hourly run asks Paystack or Stripe again. Without keys, payouts go through the test provider and always succeed.
 
 ## Address search
 

@@ -11,11 +11,15 @@ test('admin API calls carry the token and build filters into the URL', async () 
   await api.overview({ days: 7 });
   await api.setApproval('d1', false);
   await api.recordSettlement({ driverId: 'd1', direction: 'to_driver', amount: 2411 });
+  await api.payouts({ status: 'failed' });
+  await api.payDriver('d1');
   assert.deepEqual(calls.map((c) => `${c.method} ${c.url}`), [
     'GET http://api/admin/drivers?status=pending&country=GH',
     'GET http://api/admin/overview?days=7',
     'POST http://api/admin/drivers/d1/approval',
     'POST http://api/admin/settlements',
+    'GET http://api/admin/payouts?status=failed',
+    'POST http://api/admin/drivers/d1/payout',
   ]);
   assert.equal(calls[0].headers.Authorization, 'Bearer tok');
   assert.deepEqual(JSON.parse(calls[2].body), { approved: false });

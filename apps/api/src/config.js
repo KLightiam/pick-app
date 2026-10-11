@@ -23,6 +23,8 @@ export const config = {
     stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
     // Paystack needs an email per payment; riders sign in by phone, so one is made up on this domain.
     emailDomain: process.env.PAYSTACK_EMAIL_DOMAIN ?? 'riders.pick.invalid',
+    // Pay drivers automatically every week. AUTO_PAYOUTS=off leaves it to admins pressing Pay now.
+    autoPayouts: process.env.AUTO_PAYOUTS !== 'off',
   },
   // Driver documents: an S3-compatible bucket in production, a folder on disk in development.
   storage: {

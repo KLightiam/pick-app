@@ -10,7 +10,7 @@ button{background:#0B6E4F;color:#fff;border:0;border-radius:10px;padding:14px 28
 
 const escape = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-export function paymentsRouter({ tokens, payments, trips, testCheckout }) {
+export function paymentsRouter({ tokens, payments, payouts, trips, testCheckout }) {
   const router = Router();
 
   // GET /payments/unpaid -> { payment, trip } for a ride the rider still has to pay for, or { payment: null }
@@ -27,7 +27,9 @@ export function paymentsRouter({ tokens, payments, trips, testCheckout }) {
   // POST /payments/webhooks/paystack and /payments/webhooks/stripe
   router.post('/webhooks/:provider', async (req, res, next) => {
     try {
-      await payments.handleWebhook(req.params.provider, req.rawBody ?? Buffer.alloc(0), req.headers);
+      await payments.handleWebhook(req.params.provider, req.rawBody ?? Buffer.alloc(0), req.headers, {
+        onPayout: (event) => payouts?.handleEvent(event),
+      });
       res.json({ received: true });
     } catch (err) {
       if (err instanceof WebhookSignatureError) return res.status(400).json({ error: 'invalid signature' });
@@ -38,6 +40,11 @@ export function paymentsRouter({ tokens, payments, trips, testCheckout }) {
   // Where Paystack and Stripe send the rider after paying.
   router.get('/return', (_req, res) => {
     res.type('html').send(page('Pick', '<h1>Thanks</h1><p>You can go back to the Pick app now.</p>'));
+  });
+
+  // Where Stripe sends a driver after its payout sign-up (also when the sign-up link has expired).
+  router.get('/payout-return', (_req, res) => {
+    res.type('html').send(page('Pick', '<h1>Payouts</h1><p>Go back to the Pick app to see whether your payouts are set up.</p>'));
   });
 
   // A stand-in checkout page for development without Paystack or Stripe keys.

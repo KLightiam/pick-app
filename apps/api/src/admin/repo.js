@@ -116,8 +116,11 @@ export function pgAdminRepo(db) {
         `SELECT b.driver_id AS "driverId", u.name, u.phone, u.country, b.currency, b.rides,
                 b.owed_to_driver AS "owedToDriver", b.cash_collected AS "cashCollected",
                 b.commission_on_cash AS "commissionOnCash", b.paid_to_driver AS "paidToDriver",
-                b.paid_by_driver AS "paidByDriver", b.balance
+                b.paid_by_driver AS "paidByDriver", b.balance,
+                COALESCE(a.ready, false) AS "payoutReady", a.method AS "payoutMethod",
+                EXISTS (SELECT 1 FROM payouts WHERE driver_id = b.driver_id AND status = 'pending') AS "payoutPending"
            FROM driver_balances b JOIN users u ON u.id = b.driver_id
+           LEFT JOIN payout_accounts a ON a.driver_id = b.driver_id
           WHERE b.balance <> 0 AND ($1::text IS NULL OR u.country = $1)
           ORDER BY abs(b.balance) DESC`,
         [country ?? null],

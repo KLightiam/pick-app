@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import express from 'express';
-import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, isValidPoint } from '@pick/shared';
+import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, MARKETS, MOBILE_MONEY_NETWORKS, isValidPoint } from '@pick/shared';
 import { DocumentError } from '../documents/service.js';
+import { PayoutError } from '../payouts/service.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -18,7 +19,7 @@ export function sendFile(res, { bytes, contentType }) {
   res.send(bytes);
 }
 
-export function driversRouter({ tokens, drivers, routing, payments, documents }) {
+export function driversRouter({ tokens, drivers, routing, payments, payouts, documents }) {
   const router = Router();
 
   // GET /drivers/nearby?lat=..&lng=..&radiusKm=5 -> cars with free seats to show on the rider's map
@@ -42,7 +43,7 @@ export function driversRouter({ tokens, drivers, routing, payments, documents })
       if (!driver) return res.status(404).json({ error: 'driver profile not found' });
       await fn(req, res, driver);
     } catch (err) {
-      if (err instanceof DocumentError) return res.status(err.status).json({ error: err.message });
+      if (err instanceof DocumentError || err instanceof PayoutError) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   };
@@ -59,6 +60,24 @@ export function driversRouter({ tokens, drivers, routing, payments, documents })
     }
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     res.json(await payments.earnings(req.user.id, { since }));
+  }));
+
+  // GET /drivers/me/payouts -> { account, schedule, payouts, networks }: where the driver is paid, how often, and past payouts
+  router.get('/me/payouts', ...driverAuth, withDriver(async (req, res) => {
+    const ghana = MARKETS[req.user.country].payout.method === 'mobile_money';
+    res.json({
+      account: await payouts.account(req.user.id),
+      schedule: payouts.schedule(req.user.country),
+      payouts: await payouts.history(req.user.id),
+      networks: ghana ? MOBILE_MONEY_NETWORKS : [],
+    });
+  }));
+
+  // PUT /drivers/me/payout-account
+  //   Ghana:   { name, number, network: 'MTN' | 'VOD' | 'ATL' } -> { account }
+  //   Germany: {} -> { account, onboardingUrl }: Stripe's page for identity and bank details, until the account is ready
+  router.put('/me/payout-account', ...driverAuth, withDriver(async (req, res) => {
+    res.json(await payouts.setup(req.user, req.body ?? {}));
   }));
 
   // GET /drivers/me/documents -> { documents: [{ kind, label, document }] }: what this country asks for, and the latest upload of each

@@ -7,3 +7,4 @@ export * from './matching.js';
 export * from './pricing.js';
 export * from './payments.js';
 export * from './documents.js';
+export * from './payouts.js';
