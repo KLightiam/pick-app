@@ -12,6 +12,7 @@ const SELECT = `
          remaining_km AS "remainingKm",
          pickup_address AS "pickupAddress", dropoff_address AS "dropoffAddress",
          fare_estimate AS "fareEstimate", usual_fare AS "usualFare", fare_final AS "fareFinal", currency,
+         payment_method AS "paymentMethod",
          requested_at AS "requestedAt", accepted_at AS "acceptedAt", arrived_at AS "arrivedAt",
          started_at AS "startedAt", completed_at AS "completedAt",
          cancelled_at AS "cancelledAt", cancelled_by AS "cancelledBy", cancel_reason AS "cancelReason"
@@ -58,13 +59,13 @@ export function pgTripsRepo(db) {
         const { rows } = await db().query(
           `INSERT INTO trips (rider_id, pickup, dropoff, alight, pickup_address, dropoff_address,
                               fare_estimate, currency, ride_type, seats, driver_mode, match_type, remaining_km,
-                              usual_fare)
+                              usual_fare, payment_method)
            VALUES ($1, ${point('$2', '$3')}, ${point('$4', '$5')}, ${point('$6', '$7')}, $8, $9,
-                   $10, $11, $12, $13, $14, $15, $16, $17)
+                   $10, $11, $12, $13, $14, $15, $16, $17, $18)
            RETURNING id`,
           [t.riderId, t.pickup.lat, t.pickup.lng, t.dropoff.lat, t.dropoff.lng, t.alight.lat, t.alight.lng,
             t.pickupAddress ?? null, t.dropoffAddress ?? null, t.fareEstimate, t.currency,
-            t.rideType, t.seats, t.driverMode, t.matchType, t.remainingKm, t.usualFare],
+            t.rideType, t.seats, t.driverMode, t.matchType, t.remainingKm, t.usualFare, t.paymentMethod ?? 'cash'],
         );
         return findById(rows[0].id);
       } catch (err) {

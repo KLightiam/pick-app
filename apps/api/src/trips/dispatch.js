@@ -28,6 +28,7 @@ const offerView = (trip) => ({
   matchType: trip.matchType,
   fareEstimate: trip.fareEstimate,
   currency: trip.currency,
+  paymentMethod: trip.paymentMethod,
 });
 
 /**
@@ -36,7 +37,7 @@ const offerView = (trip) => ({
  * Unanswered requests are cancelled after `offerTimeoutMs` so the passenger
  * can pick someone else.
  */
-export function createDispatch({ trips, drivers, users, notifier, options = {} }) {
+export function createDispatch({ trips, drivers, users, payments, notifier, options = {} }) {
   const opts = { ...DISPATCH_DEFAULTS, ...options, match: { ...MATCH_DEFAULTS, ...options.match } };
   const timers = new Map();
 
@@ -86,9 +87,15 @@ export function createDispatch({ trips, drivers, users, notifier, options = {} }
     },
 
     async requestRide(rider, request) {
-      const { driverId, pickup, dropoff, pickupAddress, dropoffAddress, rideType, seats } = request;
+      const { driverId, pickup, dropoff, pickupAddress, dropoffAddress, rideType, seats, paymentMethod = 'cash' } = request;
       if (await trips.findActiveForRider(rider.id)) {
         throw new DispatchError(409, 'You already have an active trip');
+      }
+      if (!getMarket(rider.country).paymentMethods.includes(paymentMethod)) {
+        throw new DispatchError(400, `Paying by ${paymentMethod} isn't available in your country`);
+      }
+      if (await payments.unpaidFor(rider.id)) {
+        throw new DispatchError(402, 'Please pay for your last ride before booking another');
       }
       const driver = driverId !== rider.id ? await drivers.findById(driverId) : null;
       const option = driver?.online && driver.approved
@@ -103,6 +110,7 @@ export function createDispatch({ trips, drivers, users, notifier, options = {} }
           alight: option.alight, remainingKm: option.remainingKm,
           driverMode: option.driverMode, matchType: option.matchType,
           fareEstimate: option.fare.max, usualFare: option.fare.usual, currency: option.fare.currency,
+          paymentMethod,
         });
       } catch (err) {
         if (err instanceof ActiveTripConflict) throw new DispatchError(409, 'You already have an active trip');
@@ -185,8 +193,9 @@ export function createDispatch({ trips, drivers, users, notifier, options = {} }
     /**
      * Driver dropped the passenger off. The final fare splits each stretch of
      * the ride between whoever was in the car at the time, and is never more
-     * than the price quoted at booking. After a partway ride, `nextLeg` is the
-     * rest of the journey for the passenger to book.
+     * than the price quoted at booking. `payment` says how it's paid: cash to
+     * the driver, or pending until the rider pays in the app. After a partway
+     * ride, `nextLeg` is the rest of the journey for the passenger to book.
      */
     async complete(driver, tripId) {
       const current = await trips.findById(tripId);
@@ -198,11 +207,12 @@ export function createDispatch({ trips, drivers, users, notifier, options = {} }
       const trip = await trips.complete(tripId, { at: now, fareFinal });
       if (!trip) throw new DispatchError(409, 'This trip changed. Refresh and try again.');
 
+      const payment = await payments.recordForTrip(trip);
       const nextLeg = trip.matchType === 'partial'
         ? { pickup: trip.alight, dropoff: trip.dropoff, dropoffAddress: trip.dropoffAddress, remainingKm: trip.remainingKm }
         : null;
-      notifier.toUser(trip.riderId, 'trip:completed', { trip, nextLeg });
-      return { trip, nextLeg };
+      notifier.toUser(trip.riderId, 'trip:completed', { trip, nextLeg, payment });
+      return { trip, nextLeg, payment };
     },
 
     /** Stops pending expiry timers (for shutdown and tests). */

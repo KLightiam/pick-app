@@ -1,13 +1,15 @@
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
 // Countries Pick operates in. Prices are in minor units of the local currency
-// (pesewas, cents) and are placeholders until real pricing is set.
+// (pesewas, cents). Prices and commission rates are placeholders until real ones are set.
 export const MARKETS = Object.freeze({
   GH: Object.freeze({
     country: 'GH',
     name: 'Ghana',
     currency: 'GHS',
     paymentProvider: 'paystack',
+    paymentMethods: Object.freeze(['cash', 'app']), // app = card or mobile money through Paystack
+    commissionRate: 0.15,
     pricing: Object.freeze({
       baseFare: 500, perKm: 250, perMinute: 30, minimumFare: 1000, avgSpeedKmh: 25, roadFactor: 1.3,
     }),
@@ -17,6 +19,8 @@ export const MARKETS = Object.freeze({
     name: 'Germany',
     currency: 'EUR',
     paymentProvider: 'stripe',
+    paymentMethods: Object.freeze(['cash', 'app']), // app = card through Stripe
+    commissionRate: 0.15,
     pricing: Object.freeze({
       baseFare: 400, perKm: 200, perMinute: 40, minimumFare: 800, avgSpeedKmh: 30, roadFactor: 1.3,
     }),

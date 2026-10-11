@@ -66,7 +66,7 @@ export default function App() {
                 <Text style={styles.muted}>Sign out</Text>
               </Pressable>
             </View>
-            {user.role === 'driver' ? <DriverHome live={live} /> : <RiderHome live={live} />}
+            {user.role === 'driver' ? <DriverHome live={live} /> : <RiderHome user={user} live={live} />}
           </View>
         )}
       </SafeAreaView>

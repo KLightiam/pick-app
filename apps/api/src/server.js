@@ -15,6 +15,9 @@ import { createSms } from './sms/index.js';
 import { createRouting } from './routing/index.js';
 import { createRouteKeeper } from './drivers/routeKeeper.js';
 import { createGeocoder } from './places/index.js';
+import { pgPaymentsRepo } from './payments/repo.js';
+import { createPaymentProviders } from './payments/providers.js';
+import { createPayments } from './payments/service.js';
 
 const server = http.createServer();
 const tokens = createTokens({ secret: config.jwtSecret, expiresIn: config.jwtExpiresIn });
@@ -24,6 +27,11 @@ const trips = pgTripsRepo(db);
 const routing = createRouting(config.routing);
 const routeKeeper = createRouteKeeper({ drivers, routing });
 const io = attachRealtime(server, { corsOrigin: config.corsOrigin, tokens, drivers, routeKeeper });
+const notifier = socketNotifier(io);
+const providers = createPaymentProviders({ ...config.payments, publicUrl: config.publicUrl, isProduction: config.isProduction });
+const payments = createPayments({
+  repo: pgPaymentsRepo(db), providers, notifier, publicUrl: config.publicUrl, emailDomain: config.payments.emailDomain,
+});
 const deps = {
   tokens,
   users,
@@ -32,7 +40,9 @@ const deps = {
   routing,
   geocoder: createGeocoder({ url: config.geocoderUrl }),
   otp: createOtpService({ store: pgOtpStore(db), sms: createSms(config.sms), secret: config.jwtSecret }),
-  dispatch: createDispatch({ trips, drivers, users, notifier: socketNotifier(io) }),
+  payments,
+  testCheckout: [providers.paystack, providers.stripe].includes(providers.test) ? providers.test : null,
+  dispatch: createDispatch({ trips, drivers, users, payments, notifier }),
 };
 
 server.on('request', createApp({ corsOrigin: config.corsOrigin, deps }));

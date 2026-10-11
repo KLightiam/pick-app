@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { isValidPoint } from '@pick/shared';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 
-export function driversRouter({ tokens, drivers, routing }) {
+export function driversRouter({ tokens, drivers, routing, payments }) {
   const router = Router();
 
   // GET /drivers/nearby?lat=..&lng=..&radiusKm=5 -> cars with free seats to show on the rider's map
@@ -32,6 +32,16 @@ export function driversRouter({ tokens, drivers, routing }) {
 
   router.get('/me', ...driverAuth, withDriver(async (_req, res, driver) => {
     res.json({ driver });
+  }));
+
+  // GET /drivers/me/earnings?days=7 -> rides with what the driver earned, and their balance with Pick
+  router.get('/me/earnings', ...driverAuth, withDriver(async (req, res) => {
+    const days = Number(req.query.days ?? 7);
+    if (!Number.isInteger(days) || days < 1 || days > 90) {
+      return res.status(400).json({ error: 'days must be a whole number from 1 to 90' });
+    }
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    res.json(await payments.earnings(req.user.id, { since }));
   }));
 
   // PUT /drivers/me/vehicle { vehicleMake?, vehiclePlate?, seats } -> seats = passenger seats in the car

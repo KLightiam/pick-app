@@ -69,3 +69,17 @@ export function secondsLeft(expiresAt, now = Date.now()) {
 export function directionsUrl({ lat, lng }) {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
+
+/** How a rider can pay in the app, by country: Paystack takes mobile money in Ghana. */
+export function appPaymentLabel(country) {
+  return country === 'GH' ? 'Card or MoMo' : 'Card';
+}
+
+/** One line on a finished ride's payment, for the rider or the driver. */
+export function describePayment(payment, who) {
+  if (!payment) return '';
+  const amount = formatMoney(payment.amount, payment.currency);
+  if (payment.method === 'cash') return who === 'driver' ? `Collect ${amount} in cash` : `Pay your driver ${amount} in cash`;
+  if (payment.status === 'paid') return `${amount} paid in the app`;
+  return who === 'driver' ? `${amount} to be paid in the app` : `${amount} to pay in the app`;
+}

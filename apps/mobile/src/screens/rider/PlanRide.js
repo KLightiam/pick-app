@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { api } from '../../api-instance.js';
 import PlaceSearch from '../../components/PlaceSearch.js';
-import { MATCH_LABELS, describeDropoff, describeFare, formatKm } from '../../format.js';
+import { MATCH_LABELS, appPaymentLabel, describeDropoff, describeFare, formatKm } from '../../format.js';
 import { Body, Button, Card, Choice, ErrorText, Stepper, Title, styles } from '../../ui.js';
 
 const RIDE_TYPES = [
@@ -14,11 +14,12 @@ const RIDE_TYPES = [
  * Where from, where to, solo or shared: then the drivers who can take you, best match first.
  * `start` can pre-fill pickup and drop-off (for booking the rest of a partway ride).
  */
-export default function PlanRide({ start, onBooked }) {
+export default function PlanRide({ country, start, onBooked }) {
   const [pickup, setPickup] = useState(start?.pickup ?? null);
   const [dropoff, setDropoff] = useState(start?.dropoff ?? null);
   const [rideType, setRideType] = useState('solo');
   const [seats, setSeats] = useState(1);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [options, setOptions] = useState(null);
   const [chosen, setChosen] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -53,7 +54,7 @@ export default function PlanRide({ start, onBooked }) {
     setBusy(true);
     setError(null);
     try {
-      const { trip, expiresAt } = await api.book({ ...ride(), driverId: chosen.driverId });
+      const { trip, expiresAt } = await api.book({ ...ride(), paymentMethod, driverId: chosen.driverId });
       onBooked({ trip, option: chosen, expiresAt });
     } catch (err) {
       setError(err.message);
@@ -96,7 +97,15 @@ export default function PlanRide({ start, onBooked }) {
         <OptionCard key={o.driverId} option={o} selected={chosen?.driverId === o.driverId} onPress={() => setChosen(o)} />
       ))}
       {chosen && (
-        <Button title={`Request ${chosen.driver.name ?? 'this driver'}`} onPress={book} busy={busy} />
+        <>
+          <Body muted>Pay after the ride, only the final fare</Body>
+          <Choice
+            options={[{ value: 'cash', label: 'Cash' }, { value: 'app', label: appPaymentLabel(country) }]}
+            value={paymentMethod}
+            onChange={setPaymentMethod}
+          />
+          <Button title={`Request ${chosen.driver.name ?? 'this driver'}`} onPress={book} busy={busy} />
+        </>
       )}
       <ErrorText>{error}</ErrorText>
     </ScrollView>

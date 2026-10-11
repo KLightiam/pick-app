@@ -7,6 +7,8 @@ import { createDispatch } from '../src/trips/dispatch.js';
 import { straightRouter } from '../src/routing/index.js';
 import { ActiveTripConflict, NoRoomConflict } from '../src/trips/repo.js';
 import { hasRoom } from '../src/trips/capacity.js';
+import { testProvider } from '../src/payments/providers.js';
+import { createPayments } from '../src/payments/service.js';
 
 export function memoryOtpStore() {
   const rows = [];
@@ -145,7 +147,7 @@ export function memoryDb() {
       }
       const trip = {
         id: randomUUID(), driverId: null, status: 'requested',
-        pickupAddress: null, dropoffAddress: null, ...input,
+        pickupAddress: null, dropoffAddress: null, paymentMethod: 'cash', ...input,
         requestedAt: new Date().toISOString(), acceptedAt: null, arrivedAt: null, startedAt: null,
         completedAt: null, fareFinal: null,
         cancelledAt: null, cancelledBy: null, cancelReason: null,
@@ -198,7 +200,51 @@ export function memoryDb() {
     },
   };
 
-  return { users: usersRepo, drivers: driversRepo, trips: tripsRepo };
+  const payments = new Map();
+  const paymentsRepo = {
+    payments,
+    async create(p) {
+      const existing = [...payments.values()].find((x) => x.tripId === p.tripId);
+      if (existing) return copy(existing);
+      const row = {
+        id: randomUUID(), ...p, providerRef: null, checkoutUrl: null, createdAt: new Date(), paidAt: null,
+      };
+      payments.set(row.id, row);
+      return copy(row);
+    },
+    async findByTrip(tripId) {
+      return copy([...payments.values()].find((x) => x.tripId === tripId));
+    },
+    async findByRef(ref) {
+      return copy([...payments.values()].find((x) => x.providerRef === ref));
+    },
+    async findById(id) {
+      return copy(payments.get(id));
+    },
+    async findUnpaidForRider(riderId) {
+      return copy([...payments.values()].find((x) => x.riderId === riderId && x.status === 'pending'));
+    },
+    async setCheckout(id, { providerRef, checkoutUrl }) {
+      const row = payments.get(id);
+      if (row?.status !== 'pending') return null;
+      Object.assign(row, { providerRef, checkoutUrl });
+      return copy(row);
+    },
+    async markPaid(id, at) {
+      const row = payments.get(id);
+      if (row?.status !== 'pending') return null;
+      Object.assign(row, { status: 'paid', paidAt: at });
+      return copy(row);
+    },
+    async listForDriver(driverId, { since }) {
+      return [...payments.values()]
+        .filter((x) => x.driverId === driverId && x.createdAt >= since)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map(copy);
+    },
+  };
+
+  return { users: usersRepo, drivers: driversRepo, trips: tripsRepo, payments: paymentsRepo };
 }
 
 /** Records texts instead of sending them; lastCode(phone) reads the code back. */
@@ -239,14 +285,25 @@ export function fakeGeocoder(places = [], { fail = false } = {}) {
   };
 }
 
-export function testApp({ now, dispatchOptions, routing = straightRouter(), geocoder = fakeGeocoder() } = {}) {
+export function testApp({
+  now, dispatchOptions, routing = straightRouter(), geocoder = fakeGeocoder(), providers: customProviders,
+} = {}) {
   const sms = fakeSms();
   const store = memoryOtpStore();
   const notifier = fakeNotifier();
-  const { users, drivers, trips } = memoryDb();
+  const { users, drivers, trips, payments: paymentsRepo } = memoryDb();
   const tokens = createTokens({ secret: 'test-secret', expiresIn: '1h' });
   const otp = createOtpService({ store, sms, secret: 'test-secret', now });
-  const dispatch = createDispatch({ trips, drivers, users, notifier, options: dispatchOptions });
-  const app = createApp({ deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder } });
-  return { app, sms, store, users, drivers, trips, tokens, notifier, dispatch, routing };
+  const testCheckout = testProvider({ publicUrl: 'http://pick.test' });
+  const providers = { paystack: testCheckout, stripe: testCheckout, test: testCheckout, ...customProviders };
+  const payments = createPayments({
+    repo: paymentsRepo, providers, notifier, publicUrl: 'http://pick.test', emailDomain: 'riders.pick.invalid',
+  });
+  const dispatch = createDispatch({ trips, drivers, users, payments, notifier, options: dispatchOptions });
+  const app = createApp({
+    deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, testCheckout },
+  });
+  return {
+    app, sms, store, users, drivers, trips, tokens, notifier, dispatch, routing, payments, paymentsRepo, testCheckout,
+  };
 }
