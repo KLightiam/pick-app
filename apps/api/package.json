@@ -14,10 +14,12 @@
     "@pick/shared": "workspace:*",
     "cors": "^2.8.6",
     "express": "^5.3.0",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.1",
     "socket.io": "^4.8.4"
   },
   "devDependencies": {
+    "socket.io-client": "^4.8.4",
     "supertest": "^7.3.1"
   }
 }
