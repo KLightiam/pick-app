@@ -10,7 +10,10 @@ const PROFILE = `
        ELSE json_build_object('lat', ST_Y(d.destination::geometry), 'lng', ST_X(d.destination::geometry)) END AS destination,
   CASE WHEN d.route IS NULL THEN NULL
        ELSE (SELECT json_agg(json_build_object('lat', c->>1, 'lng', c->>0))
-               FROM json_array_elements(ST_AsGeoJSON(d.route::geometry)::json->'coordinates') c) END AS route`;
+               FROM json_array_elements(ST_AsGeoJSON(d.route::geometry)::json->'coordinates') c) END AS route,
+  (SELECT CASE WHEN count(*) = 0 THEN NULL
+               ELSE json_build_object('average', round(avg(r.stars), 1), 'count', count(*)) END
+     FROM ratings r WHERE r.to_user = d.user_id) AS rating`;
 
 const LOAD = `
   (SELECT json_build_object(

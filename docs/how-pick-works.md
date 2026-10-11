@@ -102,6 +102,8 @@ These are starting points. Each lives in one place in the code and is easy to ad
 - **A rider could pay twice** if they open two checkout pages and pay on both. Pick counts the ride as paid once; the extra payment would need refunding by hand in Paystack or Stripe for now.
 - **The live map needs a tile provider before launch.** It uses OpenStreetMap's free tiles, whose rules don't allow apps with many users. Riders still choose places by searching rather than on the map, and drivers still use the Directions button for turn-by-turn navigation.
 - **Push notifications need the app built with EAS.** Ride requests and trip updates reach closed apps once the app has an EAS project and is built with it; in Expo Go and in the browser, people only see updates while the app is open. A ride request is only worth 60 seconds, so its notification is dropped if the phone can't get it in time.
+- **Low ratings and reports don't act on their own.** Admins see ratings and reports in the dashboard and suspend drivers by hand. Riders' ratings are stored but not shown to drivers yet, and nobody is told when they get a report.
+- **A shared trip link works until the ride ends.** Anyone who has the link sees the driver's name, plate and live location while the ride is on, so riders should send it only to people they trust.
 - **Shared stretches are measured by time, not distance.** Each passenger's fare is spread over their time in the car. That's simple and needs no GPS trail, but a passenger who rides alone through heavy traffic gets a bit less of the shared discount than a distance-based split would give. This could switch to distance along the road later.
 
 ## A trip, step by step
@@ -128,5 +130,5 @@ These are starting points. Each lives in one place in the code and is easy to ad
 12. ✅ Automatic payouts to drivers: mobile money through Paystack in Ghana, bank through Stripe Connect in Germany, every week or on Pay now
 13. ✅ Push notifications: ride requests for drivers and trip updates for riders when the app is closed
 14. ✅ A live map: the driver's car on a map for the rider, and the next stops and route for the driver
-15. Ratings and safety: riders and drivers rate each other, riders share their trip with someone, and either can report a problem
+15. ✅ Ratings and safety: riders and drivers rate each other, riders share their trip with someone, and either can report a problem
 16. Getting ready to launch: real Paystack, Stripe, Twilio and storage accounts, a map tile provider, EAS builds and the app store listings

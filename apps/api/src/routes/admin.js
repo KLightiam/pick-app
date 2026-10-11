@@ -3,6 +3,7 @@ import { PAYOUT_STATUSES, getMarket } from '@pick/shared';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { DocumentError } from '../documents/service.js';
 import { PayoutError } from '../payouts/service.js';
+import { SafetyError } from '../safety/service.js';
 import { sendFile } from './drivers.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -10,7 +11,7 @@ const TRIP_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress', 'compl
 const optionalText = (v, max) => v === undefined || v === null || (typeof v === 'string' && v.length <= max);
 
 /** Everything under /admin is for admin accounts only (created with `pnpm --filter @pick/api make-admin`). */
-export function adminRouter({ tokens, admin, documents, payouts }) {
+export function adminRouter({ tokens, admin, documents, payouts, safety }) {
   const router = Router();
   router.use(requireAuth(tokens), requireRole('admin'));
 
@@ -20,7 +21,7 @@ export function adminRouter({ tokens, admin, documents, payouts }) {
     try {
       await fn(req, res);
     } catch (err) {
-      if (err instanceof DocumentError || err instanceof PayoutError) return res.status(err.status).json({ error: err.message });
+      if (err instanceof DocumentError || err instanceof PayoutError || err instanceof SafetyError) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   };
@@ -136,6 +137,19 @@ export function adminRouter({ tokens, admin, documents, payouts }) {
     if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'Driver not found' });
     if (!(await admin.driverCountry(req.params.id))) return res.status(404).json({ error: 'Driver not found' });
     res.status(201).json({ payout: await payouts.payDriver(req.params.id, { requestedBy: req.user.id }) });
+  }));
+
+  // GET /admin/reports?status=open|resolved&country= -> problems riders and drivers reported, open safety reports first
+  router.get('/reports', handle(async (req, res) => {
+    const { status } = req.query;
+    if (status !== undefined && !['open', 'resolved'].includes(status)) return res.status(400).json({ error: 'status must be open or resolved' });
+    res.json({ reports: await safety.listReports({ status, country: req.query.country }) });
+  }));
+
+  // POST /admin/reports/:id/resolve { note? } -> marks a report dealt with, with what was done
+  router.post('/reports/:id/resolve', handle(async (req, res) => {
+    if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'Report not found' });
+    res.json({ report: await safety.resolveReport(req.user, req.params.id, { note: req.body?.note }) });
   }));
 
   return router;

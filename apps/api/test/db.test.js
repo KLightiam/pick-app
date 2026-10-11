@@ -13,6 +13,7 @@ let db;
 let drivers;
 let payoutsRepo;
 let pushTokens;
+let safetyRepo;
 
 before(async () => {
   if (!url) return;
@@ -20,13 +21,15 @@ before(async () => {
   const [{ db: pool }, { createApp }, { createOtpService }, { pgOtpStore }, { createTokens },
     { pgUsersRepo }, { pgDriversRepo }, { pgTripsRepo }, { createDispatch },
     { pgPaymentsRepo }, { testProvider }, { createPayments }, { pgAdminRepo },
-    { pgDocumentsRepo }, { createDocuments }, { pgPayoutsRepo }, { createPayouts }, { pgPushTokensRepo }] = await Promise.all([
+    { pgDocumentsRepo }, { createDocuments }, { pgPayoutsRepo }, { createPayouts }, { pgPushTokensRepo },
+    { pgSafetyRepo }, { createSafety }] = await Promise.all([
     import('../src/db/pool.js'), import('../src/app.js'), import('../src/auth/otp.js'),
     import('../src/auth/otpStore.js'), import('../src/auth/tokens.js'), import('../src/users/repo.js'),
     import('../src/drivers/repo.js'), import('../src/trips/repo.js'), import('../src/trips/dispatch.js'),
     import('../src/payments/repo.js'), import('../src/payments/providers.js'), import('../src/payments/service.js'),
     import('../src/admin/repo.js'), import('../src/documents/repo.js'), import('../src/documents/service.js'),
     import('../src/payouts/repo.js'), import('../src/payouts/service.js'), import('../src/push/repo.js'),
+    import('../src/safety/repo.js'), import('../src/safety/service.js'),
   ]);
   db = pool;
   await db().query('TRUNCATE users, otp_codes CASCADE');
@@ -46,13 +49,15 @@ before(async () => {
   payoutsRepo = pgPayoutsRepo(db);
   pushTokens = pgPushTokensRepo(db);
   const payouts = createPayouts({ repo: payoutsRepo, balances: paymentsRepo, providers, notifier, publicUrl: 'http://pick.test' });
+  safetyRepo = pgSafetyRepo(db);
+  const safety = createSafety({ repo: safetyRepo, trips, drivers, publicUrl: 'http://pick.test' });
   const dispatch = createDispatch({ trips, drivers, users, payments, notifier });
   // Road routes go through a midpoint 5 km east of the start (see `at` below)
   const routing = { route: async (from, to) => ({ points: [from, { lat: 5.6, lng: -0.25 + 5 / 110.6 }, to] }) };
   ctx = {
     app: createApp({
       deps: {
-        otp, users, tokens, drivers, trips, dispatch, routing, payments, payouts, pushTokens, testCheckout, admin: pgAdminRepo(db),
+        otp, users, tokens, drivers, trips, dispatch, routing, payments, payouts, pushTokens, safety, testCheckout, admin: pgAdminRepo(db),
         documents: createDocuments({ repo: pgDocumentsRepo(db), storage: memoryStorage() }),
       },
     }),
@@ -255,6 +260,34 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   assert.deepEqual([await pushTokens.listForUser(kofi.id), await pushTokens.listForUser(esi.id)], [[], [phoneToken]]);
   await request(ctx.app).delete('/auth/push-token').set('Authorization', esi.auth).send({ token: phoneToken }).expect(204);
   assert.deepEqual(await pushTokens.listForUser(esi.id), []);
+
+  // Esi and Kofi rate each other; Kofi's rating shows on the dashboard. A share link stops showing details once the ride ends.
+  const rate = (user, stars, comment) => request(ctx.app).post(`/trips/${esiTrip}/rating`).set('Authorization', user.auth)
+    .send({ stars, comment });
+  await rate(esi, 4, 'Smooth ride').expect(201);
+  await rate(esi, 5).expect(409);
+  await rate(kofi, 5).expect(201);
+  const esiRated = (await request(ctx.app).get(`/trips/${esiTrip}/rating`).set('Authorization', esi.auth).expect(200)).body;
+  assert.equal(esiRated.rating.stars, 4);
+  const rated = (await adminGet('/admin/drivers?q=GR%201234')).body.drivers[0];
+  assert.deepEqual(rated.rating, { average: 4, count: 1 });
+  assert.deepEqual((await request(ctx.app).get('/drivers/me').set('Authorization', kofi.auth)).body.driver.rating,
+    { average: 4, count: 1 });
+  await request(ctx.app).post(`/trips/${esiTrip}/share`).set('Authorization', esi.auth).expect(409);
+  await safetyRepo.addShare({ token: 'ended-ride', tripId: esiTrip });
+  assert.deepEqual((await request(ctx.app).get('/share/ended-ride/status').expect(200)).body, { status: 'completed', ended: true });
+  await request(ctx.app).get('/share/nope/status').expect(404);
+
+  // Esi reports a problem with the ride; the admin resolves it
+  await request(ctx.app).post(`/trips/${esiTrip}/reports`).set('Authorization', esi.auth)
+    .send({ category: 'driving', details: 'Too fast on the motorway' }).expect(201);
+  const open = (await adminGet('/admin/reports?status=open')).body.reports;
+  assert.deepEqual(open.map((r) => [r.reporter.name, r.aboutUser.name, r.category]), [['Esi', 'Kofi', 'driving']]);
+  await request(ctx.app).post(`/admin/reports/${open[0].id}/resolve`).set('Authorization', adminAuth)
+    .send({ note: 'Spoke to Kofi' }).expect(200);
+  const resolved = (await adminGet('/admin/reports?status=resolved')).body.reports;
+  assert.deepEqual([resolved[0].resolvedBy, resolved[0].resolutionNote], ['Kingsley', 'Spoke to Kofi']);
+  assert.equal((await adminGet('/admin/reports?status=open')).body.reports.length, 0);
 
   // Only one payout per driver can be on its way at a time
   const pending = { driverId: kofi.id, amount: 100, currency: 'GHS', provider: 'test', at: new Date() };

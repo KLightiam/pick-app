@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { distanceKm, driverBalance, projectOntoRoute, ACTIVE_TRIP_STATUSES } from '@pick/shared';
+import { distanceKm, driverBalance, projectOntoRoute, ratingSummary, ACTIVE_TRIP_STATUSES } from '@pick/shared';
 import { createApp } from '../src/app.js';
 import { createOtpService } from '../src/auth/otp.js';
 import { createTokens } from '../src/auth/tokens.js';
@@ -12,6 +12,7 @@ import { createPayments } from '../src/payments/service.js';
 import { createDocuments } from '../src/documents/service.js';
 import { createPayouts } from '../src/payouts/service.js';
 import { withPush } from '../src/push/notifier.js';
+import { createSafety } from '../src/safety/service.js';
 
 export function memoryOtpStore() {
   const rows = [];
@@ -42,6 +43,7 @@ export function memoryDb() {
   const drivers = new Map(); // userId -> driver row
   const trips = new Map();
   const offers = new Map(); // tripId -> Set(driverId)
+  const ratings = [];
   const copy = (t) => (t ? structuredClone(t) : null);
   const isActive = (t) => ACTIVE_TRIP_STATUSES.includes(t.status);
   const isAssigned = (t) => ['accepted', 'arrived', 'in_progress'].includes(t.status);
@@ -82,7 +84,8 @@ export function memoryDb() {
       const d = drivers.get(userId);
       if (!d) return null;
       const user = users.find((u) => u.id === userId);
-      return structuredClone({ userId, name: user?.name ?? null, ...d, load: loadOf(userId) });
+      const rating = ratingSummary(ratings.filter((r) => r.toUser === userId).map((r) => r.stars));
+      return structuredClone({ userId, name: user?.name ?? null, ...d, load: loadOf(userId), rating });
     },
     async updateVehicle(userId, { vehicleMake, vehiclePlate, seats }) {
       const d = drivers.get(userId);
@@ -355,9 +358,49 @@ export function memoryDb() {
     },
   };
 
+  const shares = new Map(); // token -> tripId
+  const reports = [];
+  const safetyRepo = {
+    ratings,
+    reports,
+    async addRating({ tripId, fromUser, toUser, stars, comment }) {
+      if (ratings.some((r) => r.tripId === tripId && r.fromUser === fromUser)) return null;
+      const row = { id: randomUUID(), tripId, fromUser, toUser, stars, comment, createdAt: new Date() };
+      ratings.push(row);
+      return { id: row.id, tripId, stars, comment, createdAt: row.createdAt };
+    },
+    async findRating(tripId, fromUser) {
+      const r = ratings.find((x) => x.tripId === tripId && x.fromUser === fromUser);
+      return r ? { stars: r.stars, comment: r.comment, createdAt: r.createdAt } : null;
+    },
+    async ratingFor(userId) {
+      return ratingSummary(ratings.filter((r) => r.toUser === userId).map((r) => r.stars));
+    },
+    async addShare({ token, tripId }) { shares.set(token, tripId); },
+    async tripForShare(token) { return shares.get(token) ?? null; },
+    async addReport(r) {
+      const row = {
+        id: randomUUID(), ...r, aboutUserId: r.aboutUserId ?? null, status: 'open', resolutionNote: null, resolvedAt: null,
+        createdAt: new Date(),
+      };
+      reports.push(row);
+      return copy(row);
+    },
+    async listReports({ status } = {}) {
+      return reports.filter((r) => !status || r.status === status).map(copy);
+    },
+    async resolveReport(id, { by, note }) {
+      const row = reports.find((r) => r.id === id && r.status === 'open');
+      if (!row) return null;
+      Object.assign(row, { status: 'resolved', resolvedBy: by, resolutionNote: note, resolvedAt: new Date() });
+      return copy(row);
+    },
+    async findReport(id) { return copy(reports.find((r) => r.id === id)); },
+  };
+
   return {
     users: usersRepo, drivers: driversRepo, trips: tripsRepo, payments: paymentsRepo, documents: documentsRepo,
-    payouts: payoutsRepo,
+    payouts: payoutsRepo, safety: safetyRepo,
   };
 }
 
@@ -445,7 +488,9 @@ export function testApp({
   const pushTokens = memoryPushTokens();
   const pushSender = fakePushSender();
   const notifier = withPush(liveNotifier, { tokens: pushTokens, sender: pushSender });
-  const { users, drivers, trips, payments: paymentsRepo, documents: documentsRepo, payouts: payoutsRepo } = memoryDb();
+  const { users, drivers, trips, payments: paymentsRepo, documents: documentsRepo, payouts: payoutsRepo, safety: safetyRepo,
+  } = memoryDb();
+  const safety = createSafety({ repo: safetyRepo, trips, drivers, publicUrl: 'http://pick.test' });
   const documents = createDocuments({ repo: documentsRepo, storage });
   const tokens = createTokens({ secret: 'test-secret', expiresIn: '1h' });
   const otp = createOtpService({ store, sms, secret: 'test-secret', now });
@@ -459,10 +504,13 @@ export function testApp({
   });
   const dispatch = createDispatch({ trips, drivers, users, payments, notifier, options: dispatchOptions });
   const app = createApp({
-    deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, testCheckout, admin, documents, pushTokens },
+    deps: {
+      otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, testCheckout, admin, documents,
+      pushTokens, safety,
+    },
   });
   return {
     app, sms, store, users, drivers, trips, tokens, notifier, dispatch, routing, payments, paymentsRepo, testCheckout,
-    documents, documentsRepo, storage, payouts, payoutsRepo, pushTokens, pushSender,
+    documents, documentsRepo, storage, payouts, payoutsRepo, pushTokens, pushSender, safety, safetyRepo,
   };
 }

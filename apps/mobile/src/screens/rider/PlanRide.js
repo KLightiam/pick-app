@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { api } from '../../api-instance.js';
 import PlaceSearch from '../../components/PlaceSearch.js';
-import { MATCH_LABELS, appPaymentLabel, describeDropoff, describeFare, formatKm } from '../../format.js';
+import { MATCH_LABELS, appPaymentLabel, describeDropoff, describeFare, formatKm, formatRating } from '../../format.js';
 import { Body, Button, Card, Choice, ErrorText, Stepper, Title, styles } from '../../ui.js';
 
 const RIDE_TYPES = [
@@ -123,7 +123,7 @@ function OptionCard({ option, selected, onPress }) {
         <Body style={{ fontWeight: '600' }}>{driver.name ?? 'Driver'}</Body>
         <Body muted>{formatKm(option.pickupKm)} away</Body>
       </View>
-      <Body muted>{[driver.vehicleMake, driver.vehiclePlate].filter(Boolean).join(' · ')}</Body>
+      <Body muted>{[formatRating(driver.rating), driver.vehicleMake, driver.vehiclePlate].filter(Boolean).join(' · ')}</Body>
       <Body>{MATCH_LABELS[option.matchType]}{option.destinationAddress ? ` (heading to ${option.destinationAddress})` : ''}</Body>
       <Body muted>{describeDropoff(option)}</Body>
       <Body style={{ fontWeight: '600' }}>{describeFare(fare)}</Body>

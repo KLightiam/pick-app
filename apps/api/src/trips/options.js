@@ -17,7 +17,9 @@ export function evaluateDriver(driver, { pickup, dropoff, rideType, seats }, mar
   const usual = usualFare(pickup, match.alight, market.pricing);
   return {
     driverId: driver.userId,
-    driver: { name: driver.name, vehicleMake: driver.vehicleMake, vehiclePlate: driver.vehiclePlate },
+    driver: {
+      name: driver.name, vehicleMake: driver.vehicleMake, vehiclePlate: driver.vehiclePlate, rating: driver.rating ?? null,
+    },
     driverMode: driver.mode,
     destinationAddress: driver.mode === 'commute' ? driver.destinationAddress : null,
     matchType: match.matchType,

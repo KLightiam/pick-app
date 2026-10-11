@@ -43,3 +43,19 @@ export function describePayment(trip) {
   if (trip.paymentMethod === 'cash') return 'Cash';
   return trip.paymentStatus === 'paid' ? 'App · paid' : 'App · unpaid';
 }
+
+/** What riders and drivers can report (the same codes as @pick/shared REPORT_CATEGORIES). */
+export const REPORT_LABELS = {
+  safety: 'Felt unsafe',
+  behaviour: 'Rude or unpleasant behaviour',
+  driving: 'Dangerous driving',
+  payment: 'Fare or payment',
+  lost_item: 'Lost item',
+  other: 'Something else',
+};
+
+/** "4.6 ★ (12)", or "No ratings" for a driver nobody has rated yet. */
+export function formatRating(rating) {
+  if (!rating?.count) return 'No ratings';
+  return `${rating.average.toFixed(1)} ★ (${rating.count})`;
+}

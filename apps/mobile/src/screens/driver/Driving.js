@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Linking, ScrollView, View } from 'react-native';
 import { api } from '../../api-instance.js';
+import RateTrip from '../../components/RateTrip.js';
+import ReportProblem from '../../components/ReportProblem.js';
 import {
   DRIVER_NEXT_STEP, MATCH_LABELS, describePayment, directionsUrl, formatMoney, liveOffers, secondsLeft,
 } from '../../format.js';
@@ -95,7 +97,7 @@ export default function Driving({ driver, status, live, onOffline }) {
     const result = await api[step.call](trip.id);
     if (result.trip.status === 'completed') {
       setTrips((list) => list.filter((t) => t.id !== trip.id));
-      setDone({ trip: result.trip, payment: result.payment });
+      setDone({ trip: result.trip, payment: result.payment, rider: riders[trip.id] });
     } else {
       setTrips((list) => list.map((t) => (t.id === trip.id ? result.trip : t)));
     }
@@ -131,6 +133,8 @@ export default function Driving({ driver, status, live, onOffline }) {
           <Body style={{ fontWeight: '600' }}>Trip finished</Body>
           <Body>Fare: {formatMoney(done.trip.fareFinal, done.trip.currency)}</Body>
           <Body style={{ fontWeight: '600' }}>{describePayment(done.payment, 'driver')}</Body>
+          <RateTrip key={done.trip.id} tripId={done.trip.id} about={done.rider?.name ?? 'your passenger'} />
+          <ReportProblem key={`report:${done.trip.id}`} tripId={done.trip.id} />
         </Card>
       )}
 

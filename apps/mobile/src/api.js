@@ -63,6 +63,12 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
     start: (id) => call('POST', `/trips/${id}/start`),
     complete: (id) => call('POST', `/trips/${id}/complete`),
 
+    // Safety
+    myRating: (id) => call('GET', `/trips/${id}/rating`),
+    rateTrip: (id, stars, comment) => call('POST', `/trips/${id}/rating`, { stars, comment }),
+    shareTrip: (id) => call('POST', `/trips/${id}/share`),
+    reportProblem: (id, category, details) => call('POST', `/trips/${id}/reports`, { category, details }),
+
     // Drivers
     driverProfile: () => call('GET', '/drivers/me'),
     updateVehicle: (vehicle) => call('PUT', '/drivers/me/vehicle', vehicle),
