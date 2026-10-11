@@ -2,17 +2,18 @@
 
 Ride sharing for Ghana and Germany: commuters share empty seats with passengers going their way, alongside go-anywhere drivers. See [How Pick works](docs/how-pick-works.md) for the matching and pricing rules.
 
-Pick will have rider and driver mobile apps (React Native), a rider web app and admin dashboard (React), and a Node.js + Express API. So far the API is built.
+Pick has one mobile app for riders and drivers (React Native with Expo) and a Node.js + Express API. An admin dashboard (React) comes later.
 
 ## Layout
 
 ```
 apps/api         Express API + Socket.io live updates
+apps/mobile      The Pick app for riders and drivers (Expo, also runs in a browser)
 packages/shared  Code shared by every app (fare estimates, trip statuses, geo helpers)
 db/migrations    PostgreSQL + PostGIS schema
 ```
 
-Coming next: `apps/rider`, `apps/driver` (Expo), `apps/web` (React + Vite).
+One app serves riders and drivers: the account's role decides which screens it shows.
 
 ## Run it locally
 
@@ -38,12 +39,14 @@ pnpm test
 | POST | `/trips/estimate` | Fare, distance and time for `{ country, pickup, dropoff }`, in GHS or EUR |
 | POST | `/trips/options` | Drivers who can take a ride, best match first, with prices: `{ pickup, dropoff, rideType?, seats? }` |
 | POST | `/trips` | Book the chosen driver: `{ driverId, pickup, dropoff, rideType?, seats?, pickupAddress?, dropoffAddress? }` |
+| GET | `/trips/active` | `{ trips }`: the rider's current trip, or the driver's current passengers (for when the app reopens) |
 | GET | `/trips/:id` | The trip, for its rider and driver only |
 | POST | `/trips/:id/accept` | Driver accepts a ride request |
 | POST | `/trips/:id/arrived` | Driver is at the pickup |
 | POST | `/trips/:id/start` | Passenger is in the car |
 | POST | `/trips/:id/complete` | Passenger dropped off: returns `{ trip, nextLeg }` with the final fare, and the rest of the journey after a partway ride |
 | POST | `/trips/:id/cancel` | Rider or driver cancels: `{ reason? }` |
+| GET | `/places/search?q=&lat=&lng=` | Address search in the user's country, nearest first: `{ places: [{ name, address, location }] }` |
 | GET | `/drivers/nearby?lat=&lng=&radiusKm=` | Available drivers closest to a point |
 | GET | `/drivers/me` | The driver's profile, mode, route and current load |
 | PUT | `/drivers/me/vehicle` | `{ vehicleMake?, vehiclePlate?, seats }` |
@@ -62,6 +65,27 @@ Socket.io connections must sign in with `io(url, { auth: { token } })`.
 | `trip:status` | server → rider | The driver arrived or started the trip: `{ trip }` |
 | `trip:completed` | server → rider | Dropped off: `{ trip, nextLeg }` |
 | `trip:cancelled` | server → rider/driver | The other side or the system cancelled: `{ trip }` |
+
+## Mobile app
+
+```sh
+pnpm dev:api                                   # in one terminal
+cd apps/mobile
+EXPO_PUBLIC_API_URL=http://<your computer's LAN IP>:4000 pnpm start
+```
+
+Scan the QR code with Expo Go on your phone (it must be on the same Wi-Fi), or press `w` to open it in a browser. `EXPO_PUBLIC_API_URL` defaults to `http://localhost:4000`, which only works in the browser or a simulator on the same computer.
+
+- **Riders** search pickup and drop-off, choose solo or shared and seats, pick a driver from the list, then follow the trip live. After a partway ride, one tap books the rest of the way.
+- **Drivers** add their car, choose commute (with a destination) or go-anywhere and how many seats to share, go online, accept requests, and tap through Arrived, Start and Drop off. Their location is sent while they're online.
+
+With `SMS_PROVIDER=console`, sign-in codes are printed in the API terminal. New driver accounts need approving before they can go online: `pnpm --filter @pick/api approve-driver +233241234567`.
+
+`pnpm --filter @pick/mobile build:web` builds the browser version into `apps/mobile/dist`.
+
+## Address search
+
+The apps search addresses through the API, which uses [Photon](https://photon.komoot.io), open-source geocoding on OpenStreetMap data, limited to the user's country. The public server (the default `GEOCODER_URL`) is for development; run your own Photon for production.
 
 ## Sign-in
 

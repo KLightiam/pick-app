@@ -136,6 +136,9 @@ export function memoryDb() {
     async findActiveForRider(riderId) {
       return copy([...trips.values()].find((t) => t.riderId === riderId && isActive(t)));
     },
+    async findActiveForDriver(driverId) {
+      return [...trips.values()].filter((t) => t.driverId === driverId && isAssigned(t)).map(copy);
+    },
     async create(input) {
       if ([...trips.values()].some((t) => t.riderId === input.riderId && isActive(t))) {
         throw new ActiveTripConflict();
@@ -226,7 +229,17 @@ export function fakeNotifier() {
   };
 }
 
-export function testApp({ now, dispatchOptions, routing = straightRouter() } = {}) {
+/** Finds places from a fixed list; `fail: true` simulates the service being down. */
+export function fakeGeocoder(places = [], { fail = false } = {}) {
+  return {
+    async search(query) {
+      if (fail) throw new Error('down');
+      return places.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()));
+    },
+  };
+}
+
+export function testApp({ now, dispatchOptions, routing = straightRouter(), geocoder = fakeGeocoder() } = {}) {
   const sms = fakeSms();
   const store = memoryOtpStore();
   const notifier = fakeNotifier();
@@ -234,6 +247,6 @@ export function testApp({ now, dispatchOptions, routing = straightRouter() } = {
   const tokens = createTokens({ secret: 'test-secret', expiresIn: '1h' });
   const otp = createOtpService({ store, sms, secret: 'test-secret', now });
   const dispatch = createDispatch({ trips, drivers, users, notifier, options: dispatchOptions });
-  const app = createApp({ deps: { otp, users, tokens, drivers, trips, dispatch, routing } });
+  const app = createApp({ deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder } });
   return { app, sms, store, users, drivers, trips, tokens, notifier, dispatch, routing };
 }

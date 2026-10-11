@@ -82,6 +82,8 @@ These are starting points. Each lives in one place in the code and is easy to ad
 
 - **Road routes come from OSRM**, an open-source routing engine built on OpenStreetMap. When a commuter goes online, Pick asks for the roads from where they are to their destination. As they drive, only the part of the route ahead of them can pick anyone up, and if they leave it by more than 500 m (another road), Pick asks for a new route, at most once a minute. If routing is unavailable, Pick falls back to a straight line so drivers can still go online.
 - **Fares are worked out but not charged yet.** Payments come in a later step.
+- **No map in the app yet.** Riders choose places by searching, drivers get a Directions button that opens their maps app, and the rider sees how far away the driver is. A live map can come later.
+- **Ride requests reach drivers only while the app is open.** Push notifications for a closed app come later.
 - **Shared stretches are measured by time, not distance.** Each passenger's fare is spread over their time in the car. That's simple and needs no GPS trail, but a passenger who rides alone through heavy traffic gets a bit less of the shared discount than a distance-based split would give. This could switch to distance along the road later.
 
 ## A trip, step by step
@@ -100,6 +102,7 @@ These are starting points. Each lives in one place in the code and is easy to ad
 4. ✅ Commuter and go-anywhere drivers, direction matching, solo and shared rides, fair-share pricing
 5. ✅ Trip progress: driver arrived, picked up, dropped off, final fares, and the next leg after a partway ride
 6. ✅ Real road routes for commuters (OSRM), re-routing, and live driver location during trips
-7. Rider and driver mobile apps (React Native), and the rider web app (React)
+7. ✅ The Pick mobile app: one app for riders and drivers (the account decides which screens show), with address search
 8. Payments: Paystack in Ghana, Stripe in Germany, and driver payouts
 9. Admin dashboard: driver checks and approval, trips, support
+10. Rider web app: the mobile app already runs in a browser (Expo web), so this may only need polish for larger screens rather than a separate site

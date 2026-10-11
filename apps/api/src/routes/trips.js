@@ -62,6 +62,13 @@ export function tripsRouter({ tokens, trips, dispatch }) {
     res.status(201).json(await dispatch.requestRide(req.user, request));
   }));
 
+  // GET /trips/active -> the rider's current trip, or the driver's current passengers (for when the app reopens)
+  router.get('/active', auth, handle(async (req, res) => {
+    if (req.user.role === 'driver') return res.json({ trips: await trips.findActiveForDriver(req.user.id) });
+    const trip = await trips.findActiveForRider(req.user.id);
+    res.json({ trips: trip ? [trip] : [] });
+  }));
+
   // GET /trips/:id -> only the trip's rider and driver can see it
   router.get('/:id', auth, handle(async (req, res) => {
     const trip = await trips.findById(req.params.id);
