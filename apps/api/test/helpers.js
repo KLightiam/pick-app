@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { distanceKm, ACTIVE_TRIP_STATUSES } from '@pick/shared';
+import { distanceKm, projectOntoRoute, ACTIVE_TRIP_STATUSES } from '@pick/shared';
 import { createApp } from '../src/app.js';
 import { createOtpService } from '../src/auth/otp.js';
 import { createTokens } from '../src/auth/tokens.js';
 import { createDispatch } from '../src/trips/dispatch.js';
-import { ActiveTripConflict } from '../src/trips/repo.js';
+import { ActiveTripConflict, NoRoomConflict } from '../src/trips/repo.js';
+import { hasRoom } from '../src/trips/capacity.js';
 
 export function memoryOtpStore() {
   const rows = [];
@@ -32,11 +33,21 @@ export function memoryOtpStore() {
 /** In-memory stand-ins for the Postgres repos, sharing one set of tables. */
 export function memoryDb() {
   const users = [];
-  const drivers = new Map(); // userId -> { approved, online, location, vehicleMake, vehiclePlate }
+  const drivers = new Map(); // userId -> driver row
   const trips = new Map();
   const offers = new Map(); // tripId -> Set(driverId)
   const copy = (t) => (t ? structuredClone(t) : null);
   const isActive = (t) => ACTIVE_TRIP_STATUSES.includes(t.status);
+  const isAssigned = (t) => ['accepted', 'arrived', 'in_progress'].includes(t.status);
+
+  const loadOf = (driverId) => {
+    const active = [...trips.values()].filter((t) => t.driverId === driverId && isAssigned(t));
+    return {
+      bookings: active.length,
+      seatsUsed: active.reduce((sum, t) => sum + t.seats, 0),
+      hasSolo: active.some((t) => t.rideType === 'solo'),
+    };
+  };
 
   const usersRepo = {
     users,
@@ -50,7 +61,10 @@ export function memoryDb() {
       const user = { id: randomUUID(), phone, country, role, name: name ?? null };
       users.push(user);
       if (role === 'driver') {
-        drivers.set(user.id, { approved: false, online: false, location: null, vehicleMake: null, vehiclePlate: null });
+        drivers.set(user.id, {
+          approved: false, online: false, location: null, vehicleMake: null, vehiclePlate: null,
+          seats: 4, mode: 'anywhere', seatsOffered: 1, destination: null, destinationAddress: null, route: null,
+        });
       }
       return user;
     },
@@ -62,18 +76,49 @@ export function memoryDb() {
       const d = drivers.get(userId);
       if (!d) return null;
       const user = users.find((u) => u.id === userId);
-      return { userId, name: user?.name ?? null, ...d };
+      return structuredClone({ userId, name: user?.name ?? null, ...d, load: loadOf(userId) });
     },
-    async setStatus(userId, { online, location }) {
+    async updateVehicle(userId, { vehicleMake, vehiclePlate, seats }) {
       const d = drivers.get(userId);
-      d.online = online;
-      if (location) d.location = location;
+      Object.assign(d, { vehicleMake: vehicleMake ?? null, vehiclePlate: vehiclePlate ?? null, seats });
+      d.seatsOffered = Math.min(d.seatsOffered, seats);
+    },
+    async setStatus(userId, status) {
+      const d = drivers.get(userId);
+      if (!status.online) {
+        d.online = false;
+        return;
+      }
+      const commute = status.mode === 'commute';
+      Object.assign(d, {
+        online: true, location: status.location, mode: status.mode, seatsOffered: status.seatsOffered,
+        destination: commute ? status.destination : null,
+        destinationAddress: commute ? status.destinationAddress ?? null : null,
+        route: commute ? [status.location, status.destination] : null,
+      });
+    },
+    async updateLocation(userId, location) {
+      const d = drivers.get(userId);
+      d.location = location;
+      if (d.mode === 'commute' && d.destination) d.route = [location, d.destination];
+    },
+    async candidates(pickup, { anywhereRadiusKm, pickupDetourKm }) {
+      const nearRoute = (route) => projectOntoRoute(route, pickup).crossKm <= pickupDetourKm;
+      const ids = [...drivers.entries()]
+        .filter(([, d]) => d.online && d.approved && d.location)
+        .filter(([, d]) => (d.mode === 'anywhere'
+          ? distanceKm(d.location, pickup) <= anywhereRadiusKm
+          : d.route && nearRoute(d.route)))
+        .map(([id]) => id);
+      return Promise.all(ids.map((id) => driversRepo.findById(id)));
     },
     async nearby(point, { radiusKm, limit }) {
-      const busy = new Set([...trips.values()].filter((t) => t.driverId && isActive(t)).map((t) => t.driverId));
       return [...drivers.entries()]
-        .filter(([id, d]) => d.online && d.approved && d.location && !busy.has(id))
-        .map(([id, d]) => ({ driverId: id, ...d.location, distanceKm: distanceKm(point, d.location) }))
+        .filter(([id, d]) => {
+          const load = loadOf(id);
+          return d.online && d.approved && d.location && !load.hasSolo && load.seatsUsed < d.seatsOffered;
+        })
+        .map(([id, d]) => ({ driverId: id, mode: d.mode, ...d.location, distanceKm: distanceKm(point, d.location) }))
         .filter((d) => d.distanceKm <= radiusKm)
         .sort((a, b) => a.distanceKm - b.distanceKm)
         .slice(0, limit);
@@ -113,7 +158,7 @@ export function memoryDb() {
     async accept(tripId, driverId) {
       const trip = trips.get(tripId);
       if (trip?.status !== 'requested') return null;
-      if ([...trips.values()].some((t) => t.driverId === driverId && isActive(t))) throw new ActiveTripConflict();
+      if (!hasRoom(drivers.get(driverId), loadOf(driverId), trip)) throw new NoRoomConflict();
       Object.assign(trip, { driverId, status: 'accepted', acceptedAt: new Date().toISOString() });
       return copy(trip);
     },

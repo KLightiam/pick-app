@@ -15,11 +15,10 @@ import { createSms } from './sms/index.js';
 
 const server = http.createServer();
 const tokens = createTokens({ secret: config.jwtSecret, expiresIn: config.jwtExpiresIn });
-const io = attachRealtime(server, { corsOrigin: config.corsOrigin, tokens });
-
 const users = pgUsersRepo(db);
 const drivers = pgDriversRepo(db);
 const trips = pgTripsRepo(db);
+const io = attachRealtime(server, { corsOrigin: config.corsOrigin, tokens, drivers });
 const deps = {
   tokens,
   users,

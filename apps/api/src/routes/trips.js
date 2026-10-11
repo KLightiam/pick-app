@@ -5,6 +5,20 @@ import { DispatchError } from '../trips/dispatch.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const optionalText = (v) => v === undefined || v === null || (typeof v === 'string' && v.length <= 300);
+const RIDE_TYPES = ['solo', 'shared'];
+
+/** Validates a ride request body. Returns { error } or { request }. */
+function parseRideRequest(body = {}, { needDriver }) {
+  const { pickup, dropoff, pickupAddress, dropoffAddress, driverId, rideType = 'solo', seats = 1 } = body;
+  if (!isValidPoint(pickup) || !isValidPoint(dropoff)) return { error: 'pickup and dropoff must be { lat, lng }' };
+  if (!optionalText(pickupAddress) || !optionalText(dropoffAddress)) {
+    return { error: 'addresses must be text up to 300 characters' };
+  }
+  if (!RIDE_TYPES.includes(rideType)) return { error: 'rideType must be "solo" or "shared"' };
+  if (!Number.isInteger(seats) || seats < 1 || seats > 8) return { error: 'seats must be a whole number from 1 to 8' };
+  if (needDriver && !(typeof driverId === 'string' && UUID.test(driverId))) return { error: 'choose a driver' };
+  return { request: { pickup, dropoff, pickupAddress, dropoffAddress, driverId, rideType, seats } };
+}
 
 export function tripsRouter({ tokens, trips, dispatch }) {
   const router = Router();
@@ -33,17 +47,19 @@ export function tripsRouter({ tokens, trips, dispatch }) {
     res.json({ ...estimateFare(pickup, dropoff, market.pricing), currency: market.currency });
   });
 
-  // POST /trips { pickup, dropoff, pickupAddress?, dropoffAddress? } -> offers the ride to nearby drivers
+  // POST /trips/options { pickup, dropoff, rideType?, seats? } -> drivers who can take the ride, best first
+  router.post('/options', auth, requireRole('rider'), handle(async (req, res) => {
+    const { error, request } = parseRideRequest(req.body, { needDriver: false });
+    if (error) return res.status(400).json({ error });
+    res.json({ options: await dispatch.options(req.user, request) });
+  }));
+
+  // POST /trips { driverId, pickup, dropoff, rideType?, seats?, pickupAddress?, dropoffAddress? }
+  // -> sends the request to the chosen driver
   router.post('/', auth, requireRole('rider'), handle(async (req, res) => {
-    const { pickup, dropoff, pickupAddress, dropoffAddress } = req.body ?? {};
-    if (!isValidPoint(pickup) || !isValidPoint(dropoff)) {
-      return res.status(400).json({ error: 'pickup and dropoff must be { lat, lng }' });
-    }
-    if (!optionalText(pickupAddress) || !optionalText(dropoffAddress)) {
-      return res.status(400).json({ error: 'addresses must be text up to 300 characters' });
-    }
-    const result = await dispatch.requestRide(req.user, { pickup, dropoff, pickupAddress, dropoffAddress });
-    res.status(201).json(result);
+    const { error, request } = parseRideRequest(req.body, { needDriver: true });
+    if (error) return res.status(400).json({ error });
+    res.status(201).json(await dispatch.requestRide(req.user, request));
   }));
 
   // GET /trips/:id -> only the trip's rider and driver can see it
