@@ -18,6 +18,7 @@ import { createGeocoder } from './places/index.js';
 import { pgPaymentsRepo } from './payments/repo.js';
 import { createPaymentProviders } from './payments/providers.js';
 import { createPayments } from './payments/service.js';
+import { pgAdminRepo } from './admin/repo.js';
 
 const server = http.createServer();
 const tokens = createTokens({ secret: config.jwtSecret, expiresIn: config.jwtExpiresIn });
@@ -41,6 +42,7 @@ const deps = {
   geocoder: createGeocoder({ url: config.geocoderUrl }),
   otp: createOtpService({ store: pgOtpStore(db), sms: createSms(config.sms), secret: config.jwtSecret }),
   payments,
+  admin: pgAdminRepo(db),
   testCheckout: [providers.paystack, providers.stripe].includes(providers.test) ? providers.test : null,
   dispatch: createDispatch({ trips, drivers, users, payments, notifier }),
 };

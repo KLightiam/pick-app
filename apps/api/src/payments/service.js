@@ -95,15 +95,20 @@ export function createPayments({ repo, providers, notifier, publicUrl, emailDoma
       return r ? confirm(r.paymentId, r) : null;
     },
 
-    /** What the driver earned since `since`, and their balance with Pick. */
+    /** The driver's rides since `since` with what they earned, and their balance with Pick (all time). */
     async earnings(driverId, { since }) {
       const payments = await repo.listForDriver(driverId, { since });
-      const currency = payments[0]?.currency ?? null;
       const rides = payments.map((p) => ({
         tripId: p.tripId, method: p.method, status: p.status, amount: p.amount,
         commission: p.commission, earned: p.amount - p.commission, createdAt: p.createdAt,
       }));
-      return { since: since.toISOString(), currency, rides, ...driverBalance(payments) };
+      const balance = await repo.balanceFor(driverId);
+      return {
+        since: since.toISOString(),
+        currency: balance?.currency ?? payments[0]?.currency ?? null,
+        rides,
+        balance: balance ?? { ...driverBalance([]), currency: null },
+      };
     },
   };
 }

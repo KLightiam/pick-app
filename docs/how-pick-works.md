@@ -91,7 +91,8 @@ These are starting points. Each lives in one place in the code and is easy to ad
 ## Known limits
 
 - **Road routes come from OSRM**, an open-source routing engine built on OpenStreetMap. When a commuter goes online, Pick asks for the roads from where they are to their destination. As they drive, only the part of the route ahead of them can pick anyone up, and if they leave it by more than 500 m (another road), Pick asks for a new route, at most once a minute. If routing is unavailable, Pick falls back to a straight line so drivers can still go online.
-- **Drivers aren't paid out automatically yet.** Pick works out what it owes each driver and what they owe Pick, but sending the money (Paystack transfers to bank or mobile money, Stripe Connect payouts) needs drivers' payout details and identity checks, and comes with the admin dashboard.
+- **Drivers aren't paid out automatically yet.** Pick works out each driver's balance, and admins send the money by MoMo or bank transfer and record it in the dashboard. Automatic payouts (Paystack transfers, Stripe Connect) need drivers' payout details and identity checks.
+- **Driver checks happen outside the app.** Admins approve drivers in the dashboard after checking their licence, insurance and car themselves; drivers can't upload documents yet.
 - **Paystack needs an email address for each payment.** Riders sign in by phone, so Pick sends a made-up address based on the account (`rider-<id>@riders.pick.invalid`). Paystack's receipt emails won't reach riders until Pick asks for an email.
 - **A rider could pay twice** if they open two checkout pages and pay on both. Pick counts the ride as paid once; the extra payment would need refunding by hand in Paystack or Stripe for now.
 - **No map in the app yet.** Riders choose places by searching, drivers get a Directions button that opens their maps app, and the rider sees how far away the driver is. A live map can come later.
@@ -116,5 +117,7 @@ These are starting points. Each lives in one place in the code and is easy to ad
 6. ✅ Real road routes for commuters (OSRM), re-routing, and live driver location during trips
 7. ✅ The Pick mobile app: one app for riders and drivers (the account decides which screens show), with address search
 8. ✅ Payments: cash or app (Paystack in Ghana, Stripe in Germany), commission and driver earnings
-9. Admin dashboard: driver checks and approval, trips, support, and driver payouts
+9. ✅ Admin dashboard: driver approval and suspension, trips, and settling money with drivers
 10. Rider web app: the mobile app already runs in a browser (Expo web), so this may only need polish for larger screens rather than a separate site
+11. Driver documents (licence, insurance, car photos) and automatic payouts to drivers
+12. Push notifications for a closed app, and a live map

@@ -52,9 +52,9 @@ test('a cash ride records the fare and the commission the driver owes', async (t
 
   await post(s.ctx, s.rider, `/trips/${id}/pay`).expect(409); // nothing to pay in the app
   const { body: earnings } = await get(s.ctx, s.driver, '/drivers/me/earnings').expect(200);
-  assert.equal(earnings.cashCollected, fare);
-  assert.equal(earnings.commissionOnCash, done.payment.commission);
-  assert.equal(earnings.balance, -done.payment.commission);
+  assert.equal(earnings.balance.cashCollected, fare);
+  assert.equal(earnings.balance.commissionOnCash, done.payment.commission);
+  assert.equal(earnings.balance.balance, -done.payment.commission);
   assert.equal(earnings.rides.length, 1);
 });
 
@@ -88,7 +88,7 @@ test('an app ride is paid after drop-off through the checkout page, and both sid
   await post(s.ctx, s.rider, `/trips/${id}/pay`).expect(409); // already paid
 
   const { body: earnings } = await get(s.ctx, s.driver, '/drivers/me/earnings').expect(200);
-  assert.equal(earnings.owedToDriver, done.payment.amount - done.payment.commission);
+  assert.equal(earnings.balance.owedToDriver, done.payment.amount - done.payment.commission);
   assert.equal((await get(s.ctx, s.rider, '/payments/unpaid').expect(200)).body.payment, null);
   await post(s.ctx, s.rider, '/trips', { driverId: s.driver.id, pickup: at(1), dropoff: at(6) }).expect(201);
 });

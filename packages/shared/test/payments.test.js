@@ -20,5 +20,19 @@ test('the balance nets app earnings against commission owed on cash rides', () =
     { method: 'app', status: 'pending', amount: 1000, commission: 150 }, // not paid yet: doesn't count
     { method: 'cash', status: 'cash', amount: 1500, commission: 225 },
   ]);
-  assert.deepEqual(balance, { owedToDriver: 1700, cashCollected: 1500, commissionOnCash: 225, balance: 1475 });
+  assert.deepEqual(balance, {
+    rides: 3, owedToDriver: 1700, cashCollected: 1500, commissionOnCash: 225, paidToDriver: 0, paidByDriver: 0, balance: 1475,
+  });
+});
+
+test('settlements square the balance up', () => {
+  const payments = [
+    { method: 'app', status: 'paid', amount: 2000, commission: 300 },
+    { method: 'cash', status: 'cash', amount: 1500, commission: 225 },
+  ];
+  const { balance } = driverBalance(payments, [
+    { direction: 'to_driver', amount: 1000 },
+    { direction: 'from_driver', amount: 225 },
+  ]);
+  assert.equal(balance, 1700 - 225 - 1000 + 225);
 });

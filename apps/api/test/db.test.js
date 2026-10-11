@@ -17,11 +17,12 @@ before(async () => {
   process.env.DATABASE_URL = url;
   const [{ db: pool }, { createApp }, { createOtpService }, { pgOtpStore }, { createTokens },
     { pgUsersRepo }, { pgDriversRepo }, { pgTripsRepo }, { createDispatch },
-    { pgPaymentsRepo }, { testProvider }, { createPayments }] = await Promise.all([
+    { pgPaymentsRepo }, { testProvider }, { createPayments }, { pgAdminRepo }] = await Promise.all([
     import('../src/db/pool.js'), import('../src/app.js'), import('../src/auth/otp.js'),
     import('../src/auth/otpStore.js'), import('../src/auth/tokens.js'), import('../src/users/repo.js'),
     import('../src/drivers/repo.js'), import('../src/trips/repo.js'), import('../src/trips/dispatch.js'),
     import('../src/payments/repo.js'), import('../src/payments/providers.js'), import('../src/payments/service.js'),
+    import('../src/admin/repo.js'),
   ]);
   db = pool;
   await db().query('TRUNCATE users, otp_codes CASCADE');
@@ -41,8 +42,10 @@ before(async () => {
   // Road routes go through a midpoint 5 km east of the start (see `at` below)
   const routing = { route: async (from, to) => ({ points: [from, { lat: 5.6, lng: -0.25 + 5 / 110.6 }, to] }) };
   ctx = {
-    app: createApp({ deps: { otp, users, tokens, drivers, trips, dispatch, routing, payments, testCheckout } }),
-    sms, notifier, dispatch,
+    app: createApp({
+      deps: { otp, users, tokens, drivers, trips, dispatch, routing, payments, testCheckout, admin: pgAdminRepo(db) },
+    }),
+    sms, notifier, dispatch, tokens,
   };
 });
 
@@ -159,14 +162,51 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   assert.equal(paid.body.payment.status, 'paid');
   assert.ok(paid.body.payment.paidAt);
   const earnings = await request(ctx.app).get('/drivers/me/earnings').set('Authorization', kofi.auth).expect(200);
-  assert.equal(earnings.body.owedToDriver, paid.body.payment.amount - paid.body.payment.commission);
+  assert.equal(earnings.body.balance.owedToDriver, paid.body.payment.amount - paid.body.payment.commission);
+  assert.equal(earnings.body.balance.balance, paid.body.payment.amount - paid.body.payment.commission);
   assert.equal(earnings.body.currency, 'GHS');
+
+  // The admin dashboard sees all of it
+  const { rows: [adminUser] } = await db().query(
+    `INSERT INTO users (phone, country, role, name) VALUES ('+233249999999', 'GH', 'admin', 'Kingsley') RETURNING *`,
+  );
+  const adminAuth = `Bearer ${ctx.tokens.sign(adminUser)}`;
+  const adminGet = (path) => request(ctx.app).get(path).set('Authorization', adminAuth).expect(200);
+  const overview = (await adminGet('/admin/overview?days=1')).body;
+  assert.deepEqual(overview.drivers, { pending: 0, approved: 2, online: 2 });
+  assert.equal(overview.riders, 2);
+  assert.deepEqual(overview.trips, { cancelled: 1, completed: 1 });
+  assert.equal(overview.money[0].currency, 'GHS');
+  assert.equal(overview.money[0].appPaid, paid.body.payment.amount);
+  assert.equal(overview.money[0].commission, paid.body.payment.commission);
+  const listed = (await adminGet('/admin/trips?status=completed')).body.trips;
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].rider.name, 'Esi');
+  assert.equal(listed[0].driver.name, 'Kofi');
+  assert.equal(listed[0].paymentStatus, 'paid');
+  assert.equal((await adminGet('/admin/trips?country=DE')).body.trips.length, 0);
+  const searched = (await adminGet('/admin/drivers?q=GR%201234')).body.drivers;
+  assert.deepEqual(searched.map((d) => [d.name, d.rides, d.balance]), [['Kofi', 1, earnings.body.balance.balance]]);
+
+  // Pick pays Kofi what Esi paid in the app: his balance goes to zero
+  const owed = (await adminGet('/admin/balances')).body.balances;
+  assert.deepEqual(owed.map((b) => [b.name, b.balance]), [['Kofi', earnings.body.balance.balance]]);
+  await request(ctx.app).post('/admin/settlements').set('Authorization', adminAuth)
+    .send({ driverId: kofi.id, direction: 'to_driver', amount: owed[0].balance, reference: 'MoMo 0001' }).expect(201);
+  assert.deepEqual((await adminGet('/admin/balances')).body.balances, []);
+  const settled = (await adminGet(`/admin/settlements?driverId=${kofi.id}`)).body.settlements;
+  assert.deepEqual(settled.map((x) => [x.driverName, x.recordedBy, x.currency]), [['Kofi', 'Kingsley', 'GHS']]);
+
+  // Suspending a driver takes them offline and stops them going back online
+  await request(ctx.app).post(`/admin/drivers/${yaw.id}/approval`).set('Authorization', adminAuth)
+    .send({ approved: false }).expect(200);
+  await status(yaw, { location: at(1.5), mode: 'anywhere' }).expect(403);
+  assert.equal((await adminGet('/admin/drivers?status=pending')).body.drivers[0].name, 'Yaw');
 
   const freed = await request(ctx.app).get('/drivers/me').set('Authorization', kofi.auth).expect(200);
   assert.deepEqual(freed.body.driver.load, { bookings: 0, seatsUsed: 0, hasSolo: false });
 
-  // Going offline hides the driver but keeps their last location
-  await request(ctx.app).post('/drivers/me/status').set('Authorization', yaw.auth).send({ online: false }).expect(200);
+  // Going offline (Yaw was suspended above) hides the driver but keeps their last location
   const { rows } = await db().query('SELECT online, location IS NOT NULL AS has FROM drivers WHERE user_id = $1', [yaw.id]);
   assert.deepEqual(rows[0], { online: false, has: true });
 });

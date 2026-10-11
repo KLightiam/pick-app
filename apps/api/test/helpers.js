@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { distanceKm, projectOntoRoute, ACTIVE_TRIP_STATUSES } from '@pick/shared';
+import { distanceKm, driverBalance, projectOntoRoute, ACTIVE_TRIP_STATUSES } from '@pick/shared';
 import { createApp } from '../src/app.js';
 import { createOtpService } from '../src/auth/otp.js';
 import { createTokens } from '../src/auth/tokens.js';
@@ -236,6 +236,13 @@ export function memoryDb() {
       Object.assign(row, { status: 'paid', paidAt: at });
       return copy(row);
     },
+    settlements: [],
+    async balanceFor(driverId) {
+      const mine = [...payments.values()].filter((x) => x.driverId === driverId);
+      const settled = paymentsRepo.settlements.filter((x) => x.driverId === driverId);
+      if (!mine.length && !settled.length) return null;
+      return { currency: (mine[0] ?? settled[0]).currency, ...driverBalance(mine, settled) };
+    },
     async listForDriver(driverId, { since }) {
       return [...payments.values()]
         .filter((x) => x.driverId === driverId && x.createdAt >= since)
@@ -286,7 +293,7 @@ export function fakeGeocoder(places = [], { fail = false } = {}) {
 }
 
 export function testApp({
-  now, dispatchOptions, routing = straightRouter(), geocoder = fakeGeocoder(), providers: customProviders,
+  now, dispatchOptions, routing = straightRouter(), geocoder = fakeGeocoder(), providers: customProviders, admin,
 } = {}) {
   const sms = fakeSms();
   const store = memoryOtpStore();
@@ -301,7 +308,7 @@ export function testApp({
   });
   const dispatch = createDispatch({ trips, drivers, users, payments, notifier, options: dispatchOptions });
   const app = createApp({
-    deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, testCheckout },
+    deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, testCheckout, admin },
   });
   return {
     app, sms, store, users, drivers, trips, tokens, notifier, dispatch, routing, payments, paymentsRepo, testCheckout,

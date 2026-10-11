@@ -58,6 +58,18 @@ export function pgPaymentsRepo(db) {
       return rows[0] ?? null;
     },
 
+    /** The driver's running balance with Pick, all time, or null before their first ride. */
+    async balanceFor(driverId) {
+      const { rows } = await db().query(
+        `SELECT currency, rides, owed_to_driver AS "owedToDriver", cash_collected AS "cashCollected",
+                commission_on_cash AS "commissionOnCash", paid_to_driver AS "paidToDriver",
+                paid_by_driver AS "paidByDriver", balance
+           FROM driver_balances WHERE driver_id = $1 LIMIT 1`,
+        [driverId],
+      );
+      return rows[0] ?? null;
+    },
+
     /** The driver's payments since `since`, newest first. */
     async listForDriver(driverId, { since }) {
       const { rows } = await db().query(

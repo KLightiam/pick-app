@@ -9,7 +9,8 @@
     "start": "node --env-file-if-exists=.env src/server.js",
     "migrate": "node --env-file-if-exists=.env src/db/migrate.js",
     "test": "node --test",
-    "approve-driver": "node --env-file-if-exists=.env src/scripts/approve-driver.js"
+    "approve-driver": "node --env-file-if-exists=.env src/scripts/approve-driver.js",
+    "make-admin": "node --env-file-if-exists=.env src/scripts/make-admin.js"
   },
   "dependencies": {
     "@pick/shared": "workspace:*",

@@ -11,9 +11,13 @@ export function splitEarnings(fare, commissionRate) {
 /**
  * A driver's balance with Pick. App payments are collected by Pick and owed to
  * the driver; on cash rides the driver holds the money and owes Pick its commission.
+ * Settlements are money that has since changed hands to square up.
+ * Positive: Pick owes the driver. Negative: the driver owes Pick.
+ * (The driver_balances view in db/migrations/007_admin.sql does the same in SQL.)
  * payments: [{ method, status, amount, commission }]
+ * settlements: [{ direction: 'to_driver' | 'from_driver', amount }]
  */
-export function driverBalance(payments) {
+export function driverBalance(payments, settlements = []) {
   let owedToDriver = 0;
   let cashCollected = 0;
   let commissionOnCash = 0;
@@ -24,5 +28,16 @@ export function driverBalance(payments) {
       commissionOnCash += p.commission;
     }
   }
-  return { owedToDriver, cashCollected, commissionOnCash, balance: owedToDriver - commissionOnCash };
+  const settled = (direction) => settlements.filter((x) => x.direction === direction).reduce((sum, x) => sum + x.amount, 0);
+  const paidToDriver = settled('to_driver');
+  const paidByDriver = settled('from_driver');
+  return {
+    rides: payments.length,
+    owedToDriver,
+    cashCollected,
+    commissionOnCash,
+    paidToDriver,
+    paidByDriver,
+    balance: owedToDriver - commissionOnCash - paidToDriver + paidByDriver,
+  };
 }
