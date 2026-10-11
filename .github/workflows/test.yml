@@ -34,3 +34,6 @@ jobs:
       - run: pnpm db:migrate
       - run: pnpm test
       - run: pnpm --filter @pick/admin build
+      - run: pnpm --filter @pick/mobile build:web
+        env:
+          EXPO_OFFLINE: 1

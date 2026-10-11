@@ -94,7 +94,15 @@ Scan the QR code with Expo Go on your phone (it must be on the same Wi-Fi), or p
 
 With `SMS_PROVIDER=console`, sign-in codes are printed in the API terminal. New driver accounts need approving before they can go online: `pnpm --filter @pick/api approve-driver +233241234567`.
 
-`pnpm --filter @pick/mobile build:web` builds the browser version into `apps/mobile/dist`.
+### Pick on the web
+
+The same app runs in a browser, so riders (and drivers) can use Pick without installing anything. On a wide screen it sits in a phone-width column.
+
+```sh
+EXPO_PUBLIC_API_URL=https://api.example.com pnpm --filter @pick/mobile build:web
+```
+
+This builds a static site into `apps/mobile/dist` that any static host can serve (Netlify, Vercel, Cloudflare Pages, an S3 bucket, or nginx). Add the site's address to the API's `CORS_ORIGIN`. Browsers only share location with sites on HTTPS (or `localhost`), so serve it over HTTPS.
 
 ## Admin dashboard
 

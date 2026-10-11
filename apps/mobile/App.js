@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { api } from './src/api-instance.js';
@@ -48,28 +48,48 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-        <StatusBar style="dark" />
-        {user === undefined && !loadError && <ActivityIndicator style={{ flex: 1 }} />}
-        {user === undefined && loadError && (
-          <Screen>
-            <Body>{loadError}</Body>
-            <Button title="Try again" onPress={loadUser} />
-          </Screen>
-        )}
-        {user === null && <SignIn onSignedIn={setUser} />}
-        {user && (
-          <View style={{ flex: 1 }}>
-            <View style={[styles.row, { paddingHorizontal: 20, paddingTop: 8 }]}>
-              <Text style={[styles.body, { fontWeight: '700', color: colors.brand }]}>Pick</Text>
-              <Pressable accessibilityRole="button" onPress={signOut}>
-                <Text style={styles.muted}>Sign out</Text>
-              </Pressable>
+      <WebFrame>
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+          <StatusBar style="dark" />
+          {user === undefined && !loadError && <ActivityIndicator style={{ flex: 1 }} />}
+          {user === undefined && loadError && (
+            <Screen>
+              <Body>{loadError}</Body>
+              <Button title="Try again" onPress={loadUser} />
+            </Screen>
+          )}
+          {user === null && <SignIn onSignedIn={setUser} />}
+          {user && (
+            <View style={{ flex: 1 }}>
+              <View style={[styles.row, { paddingHorizontal: 20, paddingTop: 8 }]}>
+                <Text style={[styles.body, { fontWeight: '700', color: colors.brand }]}>Pick</Text>
+                <Pressable accessibilityRole="button" onPress={signOut}>
+                  <Text style={styles.muted}>Sign out</Text>
+                </Pressable>
+              </View>
+              {user.role === 'driver' ? <DriverHome live={live} /> : <RiderHome user={user} live={live} />}
             </View>
-            {user.role === 'driver' ? <DriverHome live={live} /> : <RiderHome user={user} live={live} />}
-          </View>
-        )}
-      </SafeAreaView>
+          )}
+        </SafeAreaView>
+      </WebFrame>
     </SafeAreaProvider>
+  );
+}
+
+// In a wide browser window the app sits in a phone-width column instead of stretching across the screen.
+function WebFrame({ children }) {
+  const { width } = useWindowDimensions();
+  if (Platform.OS !== 'web' || width < 600) return children;
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.surface, alignItems: 'center', paddingVertical: 24 }}>
+      <View
+        style={{
+          flex: 1, width: 440, maxWidth: '100%', borderRadius: 16, overflow: 'hidden',
+          borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background,
+        }}
+      >
+        {children}
+      </View>
+    </View>
   );
 }

@@ -20,7 +20,13 @@
       "package": "app.pick.mobile"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "Pick",
+      "shortName": "Pick",
+      "description": "Ride sharing in Ghana and Germany: share a commuter's empty seats or take a go-anywhere driver.",
+      "themeColor": "#0B6E4F",
+      "backgroundColor": "#FFFFFF",
+      "output": "single"
     },
     "plugins": [
       [
