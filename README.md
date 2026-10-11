@@ -38,9 +38,13 @@ pnpm test
 | GET | `/auth/me` | The signed-in user (send `Authorization: Bearer <token>`) |
 | POST | `/trips/estimate` | Fare, distance and time for `{ country, pickup, dropoff }`, in GHS or EUR |
 | POST | `/trips/options` | Drivers who can take a ride, best match first, with prices: `{ pickup, dropoff, rideType?, seats? }` |
-| POST | `/trips` | Book the chosen driver: `{ driverId, pickup, dropoff, rideType?, seats?, pickupAddress?, dropoffAddress? }` |
+| POST | `/trips` | Book the chosen driver: `{ driverId, pickup, dropoff, rideType?, seats?, paymentMethod?, pickupAddress?, dropoffAddress? }`; `paymentMethod` is `cash` (default) or `app` |
 | GET | `/trips/active` | `{ trips }`: the rider's current trip, or the driver's current passengers (for when the app reopens) |
 | GET | `/trips/:id` | The trip, for its rider and driver only |
+| GET | `/trips/:id/payment` | `{ payment }` once the trip is complete: cash, or an app payment that's pending or paid |
+| POST | `/trips/:id/pay` | Rider starts paying in the app: `{ checkoutUrl }` is the Paystack or Stripe page to open |
+| GET | `/payments/unpaid` | The rider's ride still waiting to be paid, if any: `{ payment, trip }` |
+| POST | `/payments/webhooks/paystack`, `/payments/webhooks/stripe` | Payment confirmations from Paystack and Stripe (signature checked) |
 | POST | `/trips/:id/accept` | Driver accepts a ride request |
 | POST | `/trips/:id/arrived` | Driver is at the pickup |
 | POST | `/trips/:id/start` | Passenger is in the car |
@@ -49,6 +53,7 @@ pnpm test
 | GET | `/places/search?q=&lat=&lng=` | Address search in the user's country, nearest first: `{ places: [{ name, address, location }] }` |
 | GET | `/drivers/nearby?lat=&lng=&radiusKm=` | Available drivers closest to a point |
 | GET | `/drivers/me` | The driver's profile, mode, route and current load |
+| GET | `/drivers/me/earnings?days=7` | Rides with what the driver earned, and their balance with Pick |
 | PUT | `/drivers/me/vehicle` | `{ vehicleMake?, vehiclePlate?, seats }` |
 | POST | `/drivers/me/status` | Go online `{ online: true, location, mode, destination?, destinationAddress?, seatsOffered? }` or offline `{ online: false }` |
 
@@ -63,8 +68,9 @@ Socket.io connections must sign in with `io(url, { auth: { token } })`.
 | `trip:offer_closed` | server → driver | That request was cancelled or expired |
 | `trip:accepted` | server → rider | A driver accepted: `{ trip, driver }` |
 | `trip:status` | server → rider | The driver arrived or started the trip: `{ trip }` |
-| `trip:completed` | server → rider | Dropped off: `{ trip, nextLeg }` |
+| `trip:completed` | server → rider | Dropped off: `{ trip, nextLeg, payment }` |
 | `trip:cancelled` | server → rider/driver | The other side or the system cancelled: `{ trip }` |
+| `payment:paid` | server → rider/driver | An app payment went through: `{ payment }` |
 
 ## Mobile app
 
@@ -82,6 +88,16 @@ Scan the QR code with Expo Go on your phone (it must be on the same Wi-Fi), or p
 With `SMS_PROVIDER=console`, sign-in codes are printed in the API terminal. New driver accounts need approving before they can go online: `pnpm --filter @pick/api approve-driver +233241234567`.
 
 `pnpm --filter @pick/mobile build:web` builds the browser version into `apps/mobile/dist`.
+
+## Payments
+
+Riders pay after the drop-off, in cash or in the app. App payments open Paystack's checkout (card or mobile money) in Ghana and Stripe Checkout (card) in Germany. Set these in `apps/api/.env`:
+
+- `PAYSTACK_SECRET_KEY`, and in the Paystack dashboard set the webhook URL to `<PUBLIC_URL>/payments/webhooks/paystack`.
+- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, with a Stripe webhook endpoint at `<PUBLIC_URL>/payments/webhooks/stripe` sending `checkout.session.completed`.
+- `PUBLIC_URL`: where phones and the payment providers reach the API.
+
+Use the providers' test keys while developing. With no keys at all, app payments open a test checkout page on the API itself with a Pay button, so the whole flow works locally. The API refuses to start in production without keys.
 
 ## Address search
 

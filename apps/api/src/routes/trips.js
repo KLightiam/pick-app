@@ -2,25 +2,30 @@ import { Router } from 'express';
 import { estimateFare, getMarket, isValidPoint } from '@pick/shared';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { DispatchError } from '../trips/dispatch.js';
+import { PaymentError } from '../payments/service.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const optionalText = (v) => v === undefined || v === null || (typeof v === 'string' && v.length <= 300);
 const RIDE_TYPES = ['solo', 'shared'];
+const PAYMENT_METHODS = ['cash', 'app'];
 
 /** Validates a ride request body. Returns { error } or { request }. */
 function parseRideRequest(body = {}, { needDriver }) {
-  const { pickup, dropoff, pickupAddress, dropoffAddress, driverId, rideType = 'solo', seats = 1 } = body;
+  const {
+    pickup, dropoff, pickupAddress, dropoffAddress, driverId, rideType = 'solo', seats = 1, paymentMethod = 'cash',
+  } = body;
   if (!isValidPoint(pickup) || !isValidPoint(dropoff)) return { error: 'pickup and dropoff must be { lat, lng }' };
   if (!optionalText(pickupAddress) || !optionalText(dropoffAddress)) {
     return { error: 'addresses must be text up to 300 characters' };
   }
   if (!RIDE_TYPES.includes(rideType)) return { error: 'rideType must be "solo" or "shared"' };
   if (!Number.isInteger(seats) || seats < 1 || seats > 8) return { error: 'seats must be a whole number from 1 to 8' };
+  if (!PAYMENT_METHODS.includes(paymentMethod)) return { error: 'paymentMethod must be "cash" or "app"' };
   if (needDriver && !(typeof driverId === 'string' && UUID.test(driverId))) return { error: 'choose a driver' };
-  return { request: { pickup, dropoff, pickupAddress, dropoffAddress, driverId, rideType, seats } };
+  return { request: { pickup, dropoff, pickupAddress, dropoffAddress, driverId, rideType, seats, paymentMethod } };
 }
 
-export function tripsRouter({ tokens, trips, dispatch }) {
+export function tripsRouter({ tokens, trips, dispatch, payments }) {
   const router = Router();
   const auth = requireAuth(tokens);
 
@@ -31,7 +36,7 @@ export function tripsRouter({ tokens, trips, dispatch }) {
     try {
       await fn(req, res);
     } catch (err) {
-      if (err instanceof DispatchError) return res.status(err.status).json({ error: err.message });
+      if (err instanceof DispatchError || err instanceof PaymentError) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   };
@@ -54,7 +59,8 @@ export function tripsRouter({ tokens, trips, dispatch }) {
     res.json({ options: await dispatch.options(req.user, request) });
   }));
 
-  // POST /trips { driverId, pickup, dropoff, rideType?, seats?, pickupAddress?, dropoffAddress? }
+  // POST /trips { driverId, pickup, dropoff, rideType?, seats?, paymentMethod?, pickupAddress?, dropoffAddress? }
+  // paymentMethod is 'cash' (the default) or 'app' (card, or mobile money in Ghana, paid after drop-off)
   // -> sends the request to the chosen driver
   router.post('/', auth, requireRole('rider'), handle(async (req, res) => {
     const { error, request } = parseRideRequest(req.body, { needDriver: true });
@@ -91,6 +97,21 @@ export function tripsRouter({ tokens, trips, dispatch }) {
   }));
   router.post('/:id/complete', auth, requireRole('driver'), handle(async (req, res) => {
     res.json(await dispatch.complete(req.user, req.params.id));
+  }));
+
+  // GET /trips/:id/payment -> { payment } once the trip is complete (null before)
+  router.get('/:id/payment', auth, handle(async (req, res) => {
+    const trip = await trips.findById(req.params.id);
+    if (!trip || (trip.riderId !== req.user.id && trip.driverId !== req.user.id)) {
+      return res.status(404).json({ error: 'Trip not found' });
+    }
+    const payment = await payments.forTrip(trip.id);
+    res.json({ payment: trip.riderId === req.user.id ? await payments.refresh(payment) : payment });
+  }));
+
+  // POST /trips/:id/pay -> { checkoutUrl, payment }: the Paystack or Stripe page where the rider pays
+  router.post('/:id/pay', auth, requireRole('rider'), handle(async (req, res) => {
+    res.json(await payments.startCheckout(req.user, req.params.id));
   }));
 
   router.post('/:id/cancel', auth, handle(async (req, res) => {

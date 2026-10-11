@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  describeDropoff, describeFare, directionsUrl, formatKm, formatMoney, liveOffers, secondsLeft,
+  appPaymentLabel, describeDropoff, describeFare, describePayment, directionsUrl, formatKm, formatMoney, liveOffers, secondsLeft,
 } from '../src/format.js';
 
 test('money shows in cedis and euros from minor units', () => {
@@ -44,4 +44,15 @@ test('seconds left counts down and stops at zero', () => {
 
 test('directions link to the point', () => {
   assert.equal(directionsUrl({ lat: 5.556, lng: -0.182 }), 'https://www.google.com/maps/dir/?api=1&destination=5.556,-0.182');
+});
+
+test('payment lines for riders and drivers', () => {
+  const cash = { method: 'cash', status: 'cash', amount: 2000, currency: 'GHS' };
+  const app = { method: 'app', status: 'pending', amount: 1290, currency: 'EUR' };
+  assert.equal(describePayment(cash, 'rider'), 'Pay your driver GH₵20.00 in cash');
+  assert.equal(describePayment(cash, 'driver'), 'Collect GH₵20.00 in cash');
+  assert.equal(describePayment(app, 'rider'), '€12.90 to pay in the app');
+  assert.equal(describePayment({ ...app, status: 'paid' }, 'driver'), '€12.90 paid in the app');
+  assert.equal(appPaymentLabel('GH'), 'Card or MoMo');
+  assert.equal(appPaymentLabel('DE'), 'Card');
 });

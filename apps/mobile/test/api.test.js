@@ -83,3 +83,15 @@ test('trip actions hit the right paths', async () => {
   ]);
   assert.deepEqual(JSON.parse(calls[4].body), { reason: 'changed plans' });
 });
+
+test('payment calls hit the right paths', async () => {
+  const { calls, fetchFn } = recorder(json(200, {}));
+  const api = createApi({ baseUrl: 'http://api', fetchFn });
+  await api.pay('t1');
+  await api.payment('t1');
+  await api.unpaid();
+  await api.earnings(30);
+  assert.deepEqual(calls.map((c) => `${c.method} ${c.url.replace('http://api', '')}`), [
+    'POST /trips/t1/pay', 'GET /trips/t1/payment', 'GET /payments/unpaid', 'GET /drivers/me/earnings?days=30',
+  ]);
+});

@@ -62,6 +62,14 @@ Usual fare from Osu to Tema: GHS 20.00.
 | Ama and Esi, whole way | GHS 11.00 | GHS 22.00 |
 | Ama, Esi and Kwame, whole way | GHS 7.33 | GHS 22.00 |
 
+## Paying
+
+Riders choose **cash** or **the app** when they book. Either way they pay after the drop-off, so they only ever pay the final fare, which can be lower than the price shown at booking if someone shared the car.
+
+- **Cash:** the rider pays the driver. Pick records the fare and the commission the driver owes Pick.
+- **App:** the rider taps Pay and finishes on Paystack's page (card or mobile money, Ghana) or Stripe's page (card, Germany). Card and mobile money details never touch Pick. Paystack or Stripe tells Pick when the payment goes through, and the app also checks when the rider comes back to it. Until a ride is paid, the rider can't book another.
+- **Drivers** see how each ride is paid and, for the last 7 days, what they earned. Their balance nets what Pick collected for them in the app against the commission they owe on cash rides.
+
 ## Settings we picked, and can change
 
 These are starting points. Each lives in one place in the code and is easy to adjust.
@@ -77,11 +85,15 @@ These are starting points. Each lives in one place in the code and is easy to ad
 | Time for a driver to accept | 60 seconds | `apps/api/src/trips/dispatch.js` |
 | Re-route a commuter who is off their route by | 500 m, at most once a minute | `apps/api/src/drivers/routeKeeper.js` |
 | Base fares per country | placeholders | `packages/shared/src/markets.js` |
+| Pick's commission | 15% of the fare (placeholder) | `packages/shared/src/markets.js` |
+| Payment methods per country | cash and app in both | `packages/shared/src/markets.js` |
 
 ## Known limits
 
 - **Road routes come from OSRM**, an open-source routing engine built on OpenStreetMap. When a commuter goes online, Pick asks for the roads from where they are to their destination. As they drive, only the part of the route ahead of them can pick anyone up, and if they leave it by more than 500 m (another road), Pick asks for a new route, at most once a minute. If routing is unavailable, Pick falls back to a straight line so drivers can still go online.
-- **Fares are worked out but not charged yet.** Payments come in a later step.
+- **Drivers aren't paid out automatically yet.** Pick works out what it owes each driver and what they owe Pick, but sending the money (Paystack transfers to bank or mobile money, Stripe Connect payouts) needs drivers' payout details and identity checks, and comes with the admin dashboard.
+- **Paystack needs an email address for each payment.** Riders sign in by phone, so Pick sends a made-up address based on the account (`rider-<id>@riders.pick.invalid`). Paystack's receipt emails won't reach riders until Pick asks for an email.
+- **A rider could pay twice** if they open two checkout pages and pay on both. Pick counts the ride as paid once; the extra payment would need refunding by hand in Paystack or Stripe for now.
 - **No map in the app yet.** Riders choose places by searching, drivers get a Directions button that opens their maps app, and the rider sees how far away the driver is. A live map can come later.
 - **Ride requests reach drivers only while the app is open.** Push notifications for a closed app come later.
 - **Shared stretches are measured by time, not distance.** Each passenger's fare is spread over their time in the car. That's simple and needs no GPS trail, but a passenger who rides alone through heavy traffic gets a bit less of the shared discount than a distance-based split would give. This could switch to distance along the road later.
@@ -91,7 +103,7 @@ These are starting points. Each lives in one place in the code and is easy to ad
 1. The passenger asks for options and books a driver.
 2. The driver accepts within 60 seconds.
 3. The driver taps **Arrived** at the pickup, then **Start** once the passenger is in the car. Until then, either side can cancel.
-4. The driver taps **Complete** at the drop-off. The final fare is worked out and both are told.
+4. The driver taps **Complete** at the drop-off. The final fare is worked out and both are told. The rider pays the driver in cash, or pays in the app.
 5. After a partway ride, the passenger's app gets the rest of the journey (from where they got off to where they're going) so they can book their next ride straight away.
 
 ## Build plan
@@ -103,6 +115,6 @@ These are starting points. Each lives in one place in the code and is easy to ad
 5. ✅ Trip progress: driver arrived, picked up, dropped off, final fares, and the next leg after a partway ride
 6. ✅ Real road routes for commuters (OSRM), re-routing, and live driver location during trips
 7. ✅ The Pick mobile app: one app for riders and drivers (the account decides which screens show), with address search
-8. Payments: Paystack in Ghana, Stripe in Germany, and driver payouts
-9. Admin dashboard: driver checks and approval, trips, support
+8. ✅ Payments: cash or app (Paystack in Ghana, Stripe in Germany), commission and driver earnings
+9. Admin dashboard: driver checks and approval, trips, support, and driver payouts
 10. Rider web app: the mobile app already runs in a browser (Expo web), so this may only need polish for larger screens rather than a separate site

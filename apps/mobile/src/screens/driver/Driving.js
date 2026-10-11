@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, ScrollView, View } from 'react-native';
 import { api } from '../../api-instance.js';
 import {
-  DRIVER_NEXT_STEP, MATCH_LABELS, directionsUrl, formatMoney, liveOffers, secondsLeft,
+  DRIVER_NEXT_STEP, MATCH_LABELS, describePayment, directionsUrl, formatMoney, liveOffers, secondsLeft,
 } from '../../format.js';
 import { useLiveEvent } from '../../live.js';
 import { watchLocation } from '../../location.js';
@@ -16,7 +16,7 @@ export default function Driving({ driver, status, live, onOffline }) {
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
-  const [done, setDone] = useState(null); // the last finished trip, to show its fare
+  const [done, setDone] = useState(null); // the last finished trip and its payment
 
   const loadTrips = useCallback(async () => {
     try {
@@ -35,6 +35,9 @@ export default function Driving({ driver, status, live, onOffline }) {
     return () => clearInterval(t);
   }, []);
 
+  useLiveEvent(live, 'payment:paid', ({ payment }) => {
+    setDone((d) => (d?.trip.id === payment.tripId ? { ...d, payment } : d));
+  });
   useLiveEvent(live, 'trip:offer', (offer) => setOffers((list) => [offer, ...list]));
   useLiveEvent(live, 'trip:offer_closed', ({ tripId }) => setOffers((list) => list.filter((o) => o.trip.id !== tripId)));
   useLiveEvent(live, 'trip:cancelled', ({ trip }) => {
@@ -82,7 +85,7 @@ export default function Driving({ driver, status, live, onOffline }) {
     const result = await api[step.call](trip.id);
     if (result.trip.status === 'completed') {
       setTrips((list) => list.filter((t) => t.id !== trip.id));
-      setDone(result.trip);
+      setDone({ trip: result.trip, payment: result.payment });
     } else {
       setTrips((list) => list.map((t) => (t.id === trip.id ? result.trip : t)));
     }
@@ -113,7 +116,8 @@ export default function Driving({ driver, status, live, onOffline }) {
       {done && (
         <Card>
           <Body style={{ fontWeight: '600' }}>Trip finished</Body>
-          <Body>Fare: {formatMoney(done.fareFinal, done.currency)}</Body>
+          <Body>Fare: {formatMoney(done.trip.fareFinal, done.trip.currency)}</Body>
+          <Body style={{ fontWeight: '600' }}>{describePayment(done.payment, 'driver')}</Body>
         </Card>
       )}
 
@@ -128,7 +132,7 @@ export default function Driving({ driver, status, live, onOffline }) {
             {MATCH_LABELS[offer.trip.matchType]} · {offer.trip.rideType === 'shared' ? 'Shared' : 'Solo'}
             {` · ${offer.trip.seats} ${offer.trip.seats === 1 ? 'seat' : 'seats'}`}
           </Body>
-          <Body>Up to {formatMoney(offer.trip.fareEstimate, offer.trip.currency)}</Body>
+          <Body>Up to {formatMoney(offer.trip.fareEstimate, offer.trip.currency)} · {offer.trip.paymentMethod === 'app' ? 'paid in the app' : 'cash'}</Body>
           <Button title="Accept" onPress={() => accept(offer)} busy={busy === `accept:${offer.trip.id}`} />
         </Card>
       ))}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ScrollView } from 'react-native';
 import { api } from '../../api-instance.js';
 import PlaceSearch from '../../components/PlaceSearch.js';
+import Earnings from '../../components/Earnings.js';
 import { getCurrentLocation } from '../../location.js';
 import { Body, Button, Choice, ErrorText, Stepper, Title } from '../../ui.js';
 
@@ -70,6 +71,7 @@ export default function GoOnline({ driver, onOnline, onEditCar }) {
       />
       <Button title={`Your car: ${[driver.vehicleMake, driver.vehiclePlate].filter(Boolean).join(' · ') || 'add details'}`} variant="secondary" onPress={onEditCar} />
       <ErrorText>{error}</ErrorText>
+      <Earnings />
     </ScrollView>
   );
 }

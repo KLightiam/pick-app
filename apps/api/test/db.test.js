@@ -16,10 +16,12 @@ before(async () => {
   if (!url) return;
   process.env.DATABASE_URL = url;
   const [{ db: pool }, { createApp }, { createOtpService }, { pgOtpStore }, { createTokens },
-    { pgUsersRepo }, { pgDriversRepo }, { pgTripsRepo }, { createDispatch }] = await Promise.all([
+    { pgUsersRepo }, { pgDriversRepo }, { pgTripsRepo }, { createDispatch },
+    { pgPaymentsRepo }, { testProvider }, { createPayments }] = await Promise.all([
     import('../src/db/pool.js'), import('../src/app.js'), import('../src/auth/otp.js'),
     import('../src/auth/otpStore.js'), import('../src/auth/tokens.js'), import('../src/users/repo.js'),
     import('../src/drivers/repo.js'), import('../src/trips/repo.js'), import('../src/trips/dispatch.js'),
+    import('../src/payments/repo.js'), import('../src/payments/providers.js'), import('../src/payments/service.js'),
   ]);
   db = pool;
   await db().query('TRUNCATE users, otp_codes CASCADE');
@@ -30,10 +32,18 @@ before(async () => {
   drivers = pgDriversRepo(db);
   const trips = pgTripsRepo(db);
   const otp = createOtpService({ store: pgOtpStore(db), sms, secret: 'test-secret' });
-  const dispatch = createDispatch({ trips, drivers, users, notifier });
+  const testCheckout = testProvider({ publicUrl: 'http://pick.test' });
+  const payments = createPayments({
+    repo: pgPaymentsRepo(db), providers: { paystack: testCheckout, stripe: testCheckout, test: testCheckout },
+    notifier, publicUrl: 'http://pick.test', emailDomain: 'riders.pick.invalid',
+  });
+  const dispatch = createDispatch({ trips, drivers, users, payments, notifier });
   // Road routes go through a midpoint 5 km east of the start (see `at` below)
   const routing = { route: async (from, to) => ({ points: [from, { lat: 5.6, lng: -0.25 + 5 / 110.6 }, to] }) };
-  ctx = { app: createApp({ deps: { otp, users, tokens, drivers, trips, dispatch, routing } }), sms, notifier, dispatch };
+  ctx = {
+    app: createApp({ deps: { otp, users, tokens, drivers, trips, dispatch, routing, payments, testCheckout } }),
+    sms, notifier, dispatch,
+  };
 });
 
 after(async () => {
@@ -103,7 +113,7 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   await request(ctx.app).post(`/trips/${trip.id}/accept`).set('Authorization', kofi.auth).expect(200);
 
   const second = await request(ctx.app).post('/trips').set('Authorization', esi.auth)
-    .send({ ...ride, pickup: at(2), driverId: kofi.id }).expect(201);
+    .send({ ...ride, pickup: at(2), driverId: kofi.id, paymentMethod: 'app' }).expect(201);
   const accepted = await request(ctx.app).post(`/trips/${second.body.trip.id}/accept`).set('Authorization', kofi.auth)
     .expect(200);
   assert.equal(accepted.body.rider.phone, '+233241111112');
@@ -138,6 +148,20 @@ test('commuter and go-anywhere rides, solo and shared, on a real database', opts
   assert.ok(done.body.trip.completedAt);
   assert.equal(done.body.trip.fareFinal, Math.round(done.body.trip.usualFare * 0.65));
   assert.equal(done.body.nextLeg, null);
+
+  // Esi chose to pay in the app: pending until she pays on the checkout page
+  assert.equal(done.body.payment.status, 'pending');
+  assert.equal(done.body.payment.amount, done.body.trip.fareFinal);
+  await request(ctx.app).post('/trips').set('Authorization', esi.auth).send({ ...ride, driverId: yaw.id }).expect(402);
+  const checkout = await request(ctx.app).post(`/trips/${esiTrip}/pay`).set('Authorization', esi.auth).expect(200);
+  await request(ctx.app).post(new URL(checkout.body.checkoutUrl).pathname).expect(303);
+  const paid = await request(ctx.app).get(`/trips/${esiTrip}/payment`).set('Authorization', esi.auth).expect(200);
+  assert.equal(paid.body.payment.status, 'paid');
+  assert.ok(paid.body.payment.paidAt);
+  const earnings = await request(ctx.app).get('/drivers/me/earnings').set('Authorization', kofi.auth).expect(200);
+  assert.equal(earnings.body.owedToDriver, paid.body.payment.amount - paid.body.payment.commission);
+  assert.equal(earnings.body.currency, 'GHS');
+
   const freed = await request(ctx.app).get('/drivers/me').set('Authorization', kofi.auth).expect(200);
   assert.deepEqual(freed.body.driver.load, { bookings: 0, seatsUsed: 0, hasSolo: false });
 

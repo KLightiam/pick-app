@@ -50,6 +50,9 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
     activeTrips: () => call('GET', '/trips/active'),
     trip: (id) => call('GET', `/trips/${id}`),
     cancel: (id, reason) => call('POST', `/trips/${id}/cancel`, { reason }),
+    payment: (id) => call('GET', `/trips/${id}/payment`),
+    pay: (id) => call('POST', `/trips/${id}/pay`),
+    unpaid: () => call('GET', '/payments/unpaid'),
     accept: (id) => call('POST', `/trips/${id}/accept`),
     arrived: (id) => call('POST', `/trips/${id}/arrived`),
     start: (id) => call('POST', `/trips/${id}/start`),
@@ -59,5 +62,6 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
     driverProfile: () => call('GET', '/drivers/me'),
     updateVehicle: (vehicle) => call('PUT', '/drivers/me/vehicle', vehicle),
     setDriverStatus: (status) => call('POST', '/drivers/me/status', status),
+    earnings: (days = 7) => call('GET', `/drivers/me/earnings?days=${days}`),
   };
 }

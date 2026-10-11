@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, View } from 'react-native';
+import { AppState, Linking, View } from 'react-native';
 import { distanceKm } from '@pick/shared';
 import { api } from '../../api-instance.js';
-import { CANCELLABLE, TRIP_STATUS_LABELS, formatKm, formatMoney } from '../../format.js';
+import { CANCELLABLE, TRIP_STATUS_LABELS, describePayment, formatKm, formatMoney } from '../../format.js';
 import { useLiveEvent } from '../../live.js';
 import { Body, Button, Card, ErrorText, Screen, Title } from '../../ui.js';
 
@@ -12,6 +12,7 @@ export default function RiderTrip({ booking, live, onDone }) {
   const [driver, setDriver] = useState(booking.option?.driver ?? null);
   const [driverAt, setDriverAt] = useState(null);
   const [nextLeg, setNextLeg] = useState(null);
+  const [payment, setPayment] = useState(booking.payment ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -31,7 +32,37 @@ export default function RiderTrip({ booking, live, onDone }) {
   useLiveEvent(live, 'trip:accepted', (p) => { if (mine(p)) { setTrip(p.trip); setDriver(p.driver); } });
   useLiveEvent(live, 'trip:status', (p) => { if (mine(p)) setTrip(p.trip); });
   useLiveEvent(live, 'trip:cancelled', (p) => { if (mine(p)) setTrip(p.trip); });
-  useLiveEvent(live, 'trip:completed', (p) => { if (mine(p)) { setTrip(p.trip); setNextLeg(p.nextLeg); } });
+  useLiveEvent(live, 'trip:completed', (p) => {
+    if (mine(p)) { setTrip(p.trip); setNextLeg(p.nextLeg); setPayment(p.payment); }
+  });
+  useLiveEvent(live, 'payment:paid', (p) => { if (p.payment.tripId === trip.id) setPayment(p.payment); });
+
+  // After paying on the Paystack or Stripe page, the rider comes back to the app: check if it went through.
+  const checkPayment = useCallback(async () => {
+    try {
+      const { payment: latest } = await api.payment(trip.id);
+      if (latest) setPayment(latest);
+    } catch { /* try again on the next return */ }
+  }, [trip.id]);
+  const unpaid = payment?.method === 'app' && payment.status === 'pending';
+  useEffect(() => {
+    if (!unpaid) return undefined;
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') checkPayment(); });
+    return () => sub.remove();
+  }, [unpaid, checkPayment]);
+
+  const pay = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { checkoutUrl } = await api.pay(trip.id);
+      await Linking.openURL(checkoutUrl);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   useLiveEvent(live, 'trip:driver_location', setDriverAt);
 
   const cancel = async () => {
@@ -75,20 +106,27 @@ export default function RiderTrip({ booking, live, onDone }) {
 
       {trip.status === 'completed'
         ? <Body style={{ fontSize: 20, fontWeight: '700' }}>Your fare: {formatMoney(trip.fareFinal, trip.currency)}</Body>
-        : !finished && <Body>Up to {formatMoney(trip.fareEstimate, trip.currency)}</Body>}
+        : !finished && <Body>Up to {formatMoney(trip.fareEstimate, trip.currency)}{trip.paymentMethod === 'cash' ? ', in cash' : ''}</Body>}
+      {payment && <Body>{describePayment(payment, 'rider')}</Body>}
       {trip.status === 'cancelled' && trip.cancelReason === 'no_driver_accepted' && (
         <Body>The driver didn't accept in time. Choose another driver.</Body>
       )}
 
       <ErrorText>{error}</ErrorText>
       <View style={{ gap: 10, marginTop: 'auto' }}>
-        {nextLeg && (
+        {unpaid && (
+          <>
+            <Button title={`Pay ${formatMoney(payment.amount, payment.currency)}`} onPress={pay} busy={busy} />
+            <Button title="I've paid, check again" variant="secondary" onPress={checkPayment} />
+          </>
+        )}
+        {nextLeg && !unpaid && (
           <Button
             title={`Book the rest of the way (${formatKm(nextLeg.remainingKm)})`}
             onPress={() => onDone({ nextLeg })}
           />
         )}
-        {finished && <Button title={nextLeg ? 'Done' : 'Book another ride'} variant={nextLeg ? 'secondary' : 'primary'} onPress={() => onDone({})} />}
+        {finished && !unpaid && <Button title={nextLeg ? 'Done' : 'Book another ride'} variant={nextLeg ? 'secondary' : 'primary'} onPress={() => onDone({})} />}
         {CANCELLABLE.includes(trip.status) && (
           <Button title="Cancel ride" variant="secondary" onPress={cancel} busy={busy} />
         )}

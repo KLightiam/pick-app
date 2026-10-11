@@ -15,6 +15,15 @@ export const config = {
     provider: process.env.ROUTING_PROVIDER ?? 'osrm', // 'osrm' | 'straight'
     osrmUrl: process.env.OSRM_URL ?? 'https://router.project-osrm.org',
   },
+  // Where this API is reachable from riders' phones and from Paystack/Stripe (checkout return page, test checkout).
+  publicUrl: (process.env.PUBLIC_URL ?? 'http://localhost:4000').replace(/\/$/, ''),
+  payments: {
+    paystackSecretKey: process.env.PAYSTACK_SECRET_KEY,
+    stripeSecretKey: process.env.STRIPE_SECRET_KEY,
+    stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+    // Paystack needs an email per payment; riders sign in by phone, so one is made up on this domain.
+    emailDomain: process.env.PAYSTACK_EMAIL_DOMAIN ?? 'riders.pick.invalid',
+  },
   geocoderUrl: process.env.GEOCODER_URL ?? 'https://photon.komoot.io',
   sms: {
     provider: process.env.SMS_PROVIDER ?? 'console', // 'console' | 'twilio'
