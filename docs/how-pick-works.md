@@ -118,6 +118,6 @@ These are starting points. Each lives in one place in the code and is easy to ad
 7. ✅ The Pick mobile app: one app for riders and drivers (the account decides which screens show), with address search
 8. ✅ Payments: cash or app (Paystack in Ghana, Stripe in Germany), commission and driver earnings
 9. ✅ Admin dashboard: driver approval and suspension, trips, and settling money with drivers
-10. Rider web app: the mobile app already runs in a browser (Expo web), so this may only need polish for larger screens rather than a separate site
+10. ✅ Pick on the web: the same app runs in a browser, in a phone-width column on large screens, built in CI
 11. Driver documents (licence, insurance, car photos) and automatic payouts to drivers
 12. Push notifications for a closed app, and a live map
