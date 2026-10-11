@@ -37,6 +37,7 @@ pnpm test
 | POST | `/auth/code` | Text a 6-digit sign-in code to `{ phone }` (+233 or +49 mobile numbers) |
 | POST | `/auth/verify` | Check `{ phone, code }` and return `{ token, user }`; new accounts also send `role` (`rider` or `driver`) and optional `name` |
 | GET | `/auth/me` | The signed-in user (send `Authorization: Bearer <token>`) |
+| DELETE | `/auth/me` | Deletes the account once no ride or money is open; trips and payments are kept without the person's details |
 | PUT, DELETE | `/auth/push-token` | `{ token, platform }` registers this phone's Expo push token; DELETE `{ token }` on sign-out |
 | POST | `/trips/estimate` | Fare, distance and time for `{ country, pickup, dropoff }`, in GHS or EUR |
 | POST | `/trips/options` | Drivers who can take a ride, best match first, with prices: `{ pickup, dropoff, rideType?, seats? }` |
@@ -95,6 +96,21 @@ Socket.io connections must sign in with `io(url, { auth: { token } })`.
 | `trip:completed` | server → rider | Dropped off: `{ trip, nextLeg, payment }` |
 | `trip:cancelled` | server → rider/driver | The other side or the system cancelled: `{ trip }` |
 | `payment:paid` | server → rider/driver | An app payment went through: `{ payment }` |
+
+## Going live
+
+[docs/launch-checklist.md](docs/launch-checklist.md) lists every account Pick needs and which setting each one fills in. With `NODE_ENV=production` the API checks them when it starts: it refuses to run with development settings (no real SMS, test checkout, no document bucket, a weak `JWT_SECRET`) and warns about the rest.
+
+The API ships as a Docker image that runs new migrations and then starts:
+
+```sh
+docker build -f apps/api/Dockerfile -t pick-api .      # from the repository root
+docker run -p 4000:4000 --env-file apps/api/.env pick-api
+```
+
+Any host that runs containers works (Render, Railway, Fly.io, Google Cloud Run, a VPS), with PostgreSQL 16 and PostGIS next to it. Socket.io needs WebSockets, so pick a host that supports them, and run one API instance until live updates are shared between instances.
+
+The app is built for the stores with EAS (`apps/mobile/eas.json`): `eas build --profile preview` makes an installable Android APK and an iPhone build for registered test phones, `eas build --profile production` makes store builds, and `eas submit` uploads them. Set `EXPO_PUBLIC_API_URL` in each profile to your API's address first.
 
 ## Mobile app
 
@@ -177,6 +193,7 @@ A payout counts against the driver's balance while it's on its way, so the same 
 
 - **Ratings:** after a completed trip, the rider and the driver can each give the other 1 to 5 stars and a comment, once. A driver's average and number of ratings show to riders choosing a driver, to the driver, and in the dashboard. New drivers show as "New driver".
 - **Share trip:** riders tap Share trip to send a link (WhatsApp, SMS, anything) that opens a page showing the ride's status, the driver, the car and where the car is, refreshed every 10 seconds. It needs no app or account. Once the ride ends or is cancelled, the page only says so. Links are long random tokens and the page isn't indexed or cached.
+- **Delete account:** under Account in the app. Riders and drivers can delete their account once no ride is under way and no money is left to settle. Their name, number, car, documents, payout details and rating comments are removed; trips, payments and reports stay for Pick's records without them, and the number can sign up again. Both app stores require this.
 - **Report a problem:** riders and drivers can report a problem with a trip at any time from the trip screen, by category (felt unsafe, behaviour, driving, payment, lost item, other) with details. Reports go to the dashboard's Reports page, safety first. The emergency button still calls 112.
 
 ## Address search

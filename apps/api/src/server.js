@@ -3,7 +3,7 @@ import { createApp } from './app.js';
 import { attachRealtime } from './realtime/socket.js';
 import { socketNotifier } from './realtime/notifier.js';
 import { config } from './config.js';
-import { db } from './db/pool.js';
+import { closeDb, db } from './db/pool.js';
 import { createOtpService } from './auth/otp.js';
 import { pgOtpStore } from './auth/otpStore.js';
 import { createTokens } from './auth/tokens.js';
@@ -29,6 +29,7 @@ import { expoPushSender } from './push/expo.js';
 import { withPush } from './push/notifier.js';
 import { pgSafetyRepo } from './safety/repo.js';
 import { createSafety } from './safety/service.js';
+import { createAccounts } from './accounts/service.js';
 
 const server = http.createServer();
 const tokens = createTokens({ secret: config.jwtSecret, expiresIn: config.jwtExpiresIn });
@@ -48,6 +49,7 @@ const payments = createPayments({
   repo: paymentsRepo, providers, notifier, publicUrl: config.publicUrl, emailDomain: config.payments.emailDomain,
 });
 const payouts = createPayouts({ repo: pgPayoutsRepo(db), balances: paymentsRepo, providers, notifier, publicUrl: config.publicUrl });
+const storage = createStorage({ ...config.storage, isProduction: config.isProduction });
 const deps = {
   tokens,
   users,
@@ -61,14 +63,13 @@ const deps = {
   pushTokens,
   safety: createSafety({ repo: pgSafetyRepo(db), trips, drivers, publicUrl: config.publicUrl }),
   admin: pgAdminRepo(db),
-  documents: createDocuments({
-    repo: pgDocumentsRepo(db), storage: createStorage({ ...config.storage, isProduction: config.isProduction }),
-  }),
+  documents: createDocuments({ repo: pgDocumentsRepo(db), storage }),
+  accounts: createAccounts({ users, trips, payments, balances: paymentsRepo, storage }),
   testCheckout: [providers.paystack, providers.stripe].includes(providers.test) ? providers.test : null,
   dispatch: createDispatch({ trips, drivers, users, payments, notifier }),
 };
 
-server.on('request', createApp({ corsOrigin: config.corsOrigin, deps }));
+server.on('request', createApp({ corsOrigin: config.corsOrigin, https: config.publicUrl.startsWith('https://'), deps }));
 server.listen(config.port, () => {
   console.log(`Pick API listening on http://localhost:${config.port}`);
 });
@@ -80,4 +81,14 @@ if (config.payments.autoPayouts) {
     .catch((err) => console.error('payouts', err));
   setInterval(run, 60 * 60 * 1000).unref();
   setTimeout(run, 60 * 1000).unref();
+}
+
+// Hosting platforms send SIGTERM before replacing the server: finish open requests, then close the database.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.once(signal, () => {
+    console.log(`${signal}: shutting down`);
+    deps.dispatch.close();
+    io.close(() => closeDb().finally(() => process.exit(0))); // also closes the HTTP server
+    setTimeout(() => process.exit(0), 10_000).unref();
+  });
 }

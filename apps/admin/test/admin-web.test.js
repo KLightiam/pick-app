@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApi } from '../src/api.js';
-import { describeBalance, describePayment, formatMoney, formatRating, parseMoney } from '../src/format.js';
+import { describeBalance, describePayment, formatMoney, formatRating, parseMoney, phoneLabel } from '../src/format.js';
 
 test('admin API calls carry the token and build filters into the URL', async () => {
   const calls = [];
@@ -69,4 +69,9 @@ test('document files are fetched with the sign-in header', async () => {
 test('driver ratings', () => {
   assert.equal(formatRating({ average: 4.25, count: 4 }), '4.3 ★ (4)');
   assert.equal(formatRating(null), 'No ratings');
+});
+
+test('deleted accounts show as such instead of a number', () => {
+  assert.equal(phoneLabel('+233241234567'), '+233241234567');
+  assert.equal(phoneLabel('deleted:0b0e'), 'Deleted account');
 });

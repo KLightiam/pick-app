@@ -13,9 +13,9 @@ export function pgAdminRepo(db) {
                   count(*) FILTER (WHERE d.approved)::int AS approved,
                   count(*) FILTER (WHERE d.approved AND d.online)::int AS online
              FROM drivers d JOIN users u ON u.id = d.user_id
-            WHERE $1::text IS NULL OR u.country = $1`, [c]),
+            WHERE u.deleted_at IS NULL AND ($1::text IS NULL OR u.country = $1)`, [c]),
         db().query(
-          `SELECT count(*)::int AS riders FROM users WHERE role = 'rider' AND ($1::text IS NULL OR country = $1)`, [c]),
+          `SELECT count(*)::int AS riders FROM users WHERE role = 'rider' AND deleted_at IS NULL AND ($1::text IS NULL OR country = $1)`, [c]),
         db().query(
           `SELECT t.status, count(*)::int AS count
              FROM trips t JOIN users u ON u.id = t.rider_id
@@ -61,7 +61,7 @@ export function pgAdminRepo(db) {
                FROM (SELECT DISTINCT ON (kind) status FROM driver_documents
                       WHERE driver_id = d.user_id ORDER BY kind, uploaded_at DESC) latest
            ) docs ON true
-          WHERE ($1 = 'all' OR ($1 = 'pending' AND NOT d.approved) OR ($1 = 'approved' AND d.approved))
+          WHERE u.deleted_at IS NULL AND ($1 = 'all' OR ($1 = 'pending' AND NOT d.approved) OR ($1 = 'approved' AND d.approved))
             AND ($2::text IS NULL OR u.country = $2)
             AND ($3::text IS NULL OR u.name ILIKE '%' || $3 || '%' OR u.phone LIKE '%' || $3 || '%'
                  OR d.vehicle_plate ILIKE '%' || $3 || '%')

@@ -2,7 +2,7 @@
 // Events that need no notification (the rider's own payment, the car moving) return null.
 
 const SYMBOLS = { GHS: 'GH₵', EUR: '€' };
-const money = (minor, currency) => `${SYMBOLS[currency] ?? `${currency} `}${(minor / 100).toFixed(2)}`;
+export const money = (minor, currency) => `${SYMBOLS[currency] ?? `${currency} `}${(minor / 100).toFixed(2)}`;
 
 /** -> { title, body, data } or null. `userId` is who the event is for. */
 export function pushMessageFor(event, payload, userId) {

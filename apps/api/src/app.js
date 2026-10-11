@@ -9,11 +9,17 @@ import { adminRouter } from './routes/admin.js';
 import { shareRouter } from './routes/share.js';
 
 /**
- * deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, admin, documents, pushTokens, safety, testCheckout? }
+ * deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, admin, documents, pushTokens, safety, accounts, testCheckout? }
  * See server.js for the real ones and test/helpers.js for in-memory fakes.
  */
-export function createApp({ corsOrigin = '*', deps }) {
+export function createApp({ corsOrigin = '*', https = false, deps }) {
   const app = express();
+  app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer' });
+    if (https) res.set('Strict-Transport-Security', 'max-age=31536000');
+    next();
+  });
   app.use(cors({ origin: corsOrigin }));
   // Webhooks are verified against the exact bytes the provider sent.
   app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));

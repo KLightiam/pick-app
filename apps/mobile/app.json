@@ -7,8 +7,11 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "app.pick.mobile"
+      "supportsTablet": false,
+      "bundleIdentifier": "app.pick.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -48,6 +51,7 @@
           "color": "#0B6E4F"
         }
       ]
-    ]
+    ],
+    "scheme": "pick"
   }
 }

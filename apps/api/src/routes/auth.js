@@ -3,10 +3,11 @@ import { parseMarketPhone } from '@pick/shared';
 import { OtpError } from '../auth/otp.js';
 import { requireAuth } from '../auth/middleware.js';
 import { isExpoPushToken } from '../push/expo.js';
+import { AccountError } from '../accounts/service.js';
 
 const SIGNUP_ROLES = ['rider', 'driver'];
 
-export function authRouter({ otp, users, tokens, pushTokens }) {
+export function authRouter({ otp, users, tokens, pushTokens, accounts }) {
   const router = Router();
 
   const otpErrorStatus = { rate_limited: 429, invalid_code: 401 };
@@ -15,6 +16,7 @@ export function authRouter({ otp, users, tokens, pushTokens }) {
       await fn(req, res);
     } catch (err) {
       if (err instanceof OtpError) return res.status(otpErrorStatus[err.code]).json({ error: err.message });
+      if (err instanceof AccountError) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   };
@@ -48,6 +50,12 @@ export function authRouter({ otp, users, tokens, pushTokens }) {
     const user = await users.findById(req.user.id);
     if (!user) return res.status(401).json({ error: 'sign in required' });
     res.json({ user });
+  }));
+
+  // DELETE /auth/me -> deletes the account: name, number, car, documents and payout details are removed
+  router.delete('/me', requireAuth(tokens), handle(async (req, res) => {
+    await accounts.deleteAccount(req.user);
+    res.status(204).end();
   }));
 
   // PUT /auth/push-token { token, platform: 'ios' | 'android' } -> this phone gets push notifications for this account

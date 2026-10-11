@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../session.js';
-import { STATUS_LABELS, describePayment, formatDateTime, formatMoney } from '../format.js';
+import { STATUS_LABELS, describePayment, formatDateTime, formatMoney, phoneLabel } from '../format.js';
 
 export default function Trips({ country }) {
   const [status, setStatus] = useState('');
@@ -41,8 +41,8 @@ export default function Trips({ country }) {
               {trips.map((t) => (
                 <tr key={t.id}>
                   <td>{formatDateTime(t.requestedAt)}</td>
-                  <td>{t.rider.name ?? '—'}<div className="muted">{t.rider.phone}</div></td>
-                  <td>{t.driver ? <>{t.driver.name ?? '—'}<div className="muted">{t.driver.phone}</div></> : <span className="muted">None</span>}</td>
+                  <td>{t.rider.name ?? '—'}<div className="muted">{phoneLabel(t.rider.phone)}</div></td>
+                  <td>{t.driver ? <>{t.driver.name ?? '—'}<div className="muted">{phoneLabel(t.driver.phone)}</div></> : <span className="muted">None</span>}</td>
                   <td>{t.pickupAddress ?? 'Pin'} → {t.dropoffAddress ?? 'Pin'}</td>
                   <td>{t.rideType === 'shared' ? 'Shared' : 'Solo'} · {t.driverMode === 'commute' ? 'Commuter' : 'Go-anywhere'}</td>
                   <td>{t.fareFinal !== null ? formatMoney(t.fareFinal, t.currency) : <span className="muted">up to {formatMoney(t.fareEstimate, t.currency)}</span>}</td>

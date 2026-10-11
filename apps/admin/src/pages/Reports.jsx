@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { api } from '../session.js';
 import { useLoad } from '../useLoad.js';
-import { REPORT_LABELS, formatDateTime } from '../format.js';
+import { REPORT_LABELS, formatDateTime, phoneLabel } from '../format.js';
 
 const FILTERS = [{ value: 'open', label: 'Open' }, { value: 'resolved', label: 'Resolved' }];
 const ROLES = { rider: 'Rider', driver: 'Driver' };
 
-const person = (p) => (p ? <>{p.name ?? 'No name'} <span className="muted">({ROLES[p.role] ?? p.role})</span><div className="muted">{p.phone}</div></> : '—');
+const person = (p) => (p ? <>{p.name ?? 'No name'} <span className="muted">({ROLES[p.role] ?? p.role})</span><div className="muted">{phoneLabel(p.phone)}</div></> : '—');
 
 export default function Reports({ country }) {
   const [status, setStatus] = useState('open');

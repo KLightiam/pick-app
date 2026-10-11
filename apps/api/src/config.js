@@ -1,14 +1,21 @@
+import { launchProblems, parseOrigins } from './launchCheck.js';
+
 const isProduction = process.env.NODE_ENV === 'production';
 
-if (isProduction && !process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET must be set in production');
+// In production, refuse to start with development settings (see launchCheck.js and docs/launch-checklist.md).
+if (isProduction) {
+  const { errors, warnings } = launchProblems(process.env);
+  for (const w of warnings) console.warn(`Warning: ${w}`);
+  if (errors.length) {
+    throw new Error(`Pick isn't set up for production yet:\n${errors.map((e) => `- ${e}`).join('\n')}`);
+  }
 }
 
 export const config = {
   isProduction,
   port: Number(process.env.PORT ?? 4000),
   databaseUrl: process.env.DATABASE_URL ?? 'postgres://pick:pick@localhost:5432/pick',
-  corsOrigin: process.env.CORS_ORIGIN ?? '*',
+  corsOrigin: parseOrigins(process.env.CORS_ORIGIN), // CORS_ORIGIN=https://pick.example,https://admin.pick.example
   jwtSecret: process.env.JWT_SECRET ?? 'dev-only-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '30d',
   routing: {

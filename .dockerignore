@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/.expo
+**/.env
+**/uploads
+.git
+apps/mobile
+apps/admin
