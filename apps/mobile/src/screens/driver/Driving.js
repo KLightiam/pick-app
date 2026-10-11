@@ -6,6 +6,8 @@ import {
 } from '../../format.js';
 import { useLiveEvent } from '../../live.js';
 import { watchLocation } from '../../location.js';
+import LiveMap from '../../map/LiveMap.js';
+import { driverScene } from '../../map/scene.js';
 import { Body, Button, Card, ErrorText, Title, styles } from '../../ui.js';
 
 /** Online: ride requests come in, the driver accepts them and takes each passenger through their trip. */
@@ -17,6 +19,7 @@ export default function Driving({ driver, status, live, onOffline }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null); // the last finished trip and its payment
+  const [me, setMe] = useState(null); // where the car is
 
   // Also when the app comes back from the background, e.g. opened from a ride request notification.
   const loadTrips = useCallback(async () => {
@@ -59,6 +62,7 @@ export default function Driving({ driver, status, live, onOffline }) {
     let stop;
     let stopped = false;
     watchLocation((point) => {
+      setMe(point);
       const active = tripsRef.current;
       if (active.length === 0) live?.emit('driver:location', point);
       for (const t of active) live?.emit('driver:location', { ...point, tripId: t.id });
@@ -108,6 +112,7 @@ export default function Driving({ driver, status, live, onOffline }) {
   });
 
   const open = liveOffers(offers, now);
+  const route = status.mode === 'commute' ? (status.route?.points ?? driver.route) : null;
 
   return (
     <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }}>
@@ -118,6 +123,8 @@ export default function Driving({ driver, status, live, onOffline }) {
           : 'Going anywhere'}
         {` · sharing ${status.seatsOffered} ${status.seatsOffered === 1 ? 'seat' : 'seats'}`}
       </Body>
+
+      {(trips.length > 0 || route) && <LiveMap scene={driverScene({ me, trips, route })} height={220} />}
 
       {done && (
         <Card>

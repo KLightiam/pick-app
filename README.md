@@ -105,6 +105,12 @@ Scan the QR code with Expo Go on your phone (it must be on the same Wi-Fi), or p
 
 With `SMS_PROVIDER=console`, sign-in codes are printed in the API terminal. New driver accounts need approving before they can go online: `pnpm --filter @pick/api approve-driver +233241234567`.
 
+### Live map
+
+Riders see their pickup, drop-off and the driver's car moving towards them. Drivers see where they are, each passenger's next stop and, for commuters, the road to their destination. The map is a small Leaflet page shown in a WebView on phones and an iframe on the web, so it needs no Google or Apple Maps keys.
+
+Tiles come from OpenStreetMap's own servers, which is fine for development but not allowed for an app with many users. Before launch, pick a tile provider (MapTiler, Stadia Maps, Thunderforest and others have free tiers) and set `EXPO_PUBLIC_MAP_TILES` to its URL template and `EXPO_PUBLIC_MAP_ATTRIBUTION` to the credit it asks for.
+
 ### Push notifications
 
 When the app is closed, drivers get ride requests and riders get trip updates (driver on the way, arrived, trip complete, cancelled) as push notifications, sent through Expo's push service. Drivers also hear when a ride is paid in the app and when a payout is sent. While the app is open, the live connection shows everything and no banner pops up.
