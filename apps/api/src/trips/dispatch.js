@@ -1,10 +1,11 @@
-import { canTransition, getMarket, MATCH_DEFAULTS } from '@pick/shared';
+import { canTransition, getMarket, splitFares, MATCH_DEFAULTS } from '@pick/shared';
 import { ActiveTripConflict, NoRoomConflict } from './repo.js';
 import { evaluateDriver, findRideOptions } from './options.js';
 
 export const DISPATCH_DEFAULTS = Object.freeze({
   offerTimeoutMs: 60_000, // how long the chosen driver has to accept
   match: MATCH_DEFAULTS,
+  now: () => new Date(),
 });
 
 export class DispatchError extends Error {
@@ -50,6 +51,22 @@ export function createDispatch({ trips, drivers, users, notifier, options = {} }
     }
   };
 
+  // Positions are times in ms: who was in the car, and for how long.
+  const fareFor = async (trip, now) => {
+    const ms = (t) => new Date(t).getTime();
+    const end = (t) => (t.id === trip.id || !t.completedAt ? ms(now) : ms(t.completedAt));
+    const rides = await trips.ridesOverlapping(trip.driverId, { from: trip.startedAt, to: now });
+    if (!rides.some((t) => t.id === trip.id)) rides.push(trip);
+    const passengers = rides.map((t) => ({
+      id: t.id,
+      startKm: ms(t.startedAt),
+      endKm: Math.max(end(t), ms(t.startedAt) + 1), // a ride always lasts at least 1 ms
+      usual: t.usualFare ?? t.fareEstimate,
+      seats: t.seats,
+    }));
+    return splitFares({ driverMode: trip.driverMode, passengers })[trip.id];
+  };
+
   const expire = async (tripId) => {
     timers.delete(tripId);
     try {
@@ -85,7 +102,7 @@ export function createDispatch({ trips, drivers, users, notifier, options = {} }
           riderId: rider.id, pickup, dropoff, pickupAddress, dropoffAddress, rideType, seats,
           alight: option.alight, remainingKm: option.remainingKm,
           driverMode: option.driverMode, matchType: option.matchType,
-          fareEstimate: option.fare.max, currency: option.fare.currency,
+          fareEstimate: option.fare.max, usualFare: option.fare.usual, currency: option.fare.currency,
         });
       } catch (err) {
         if (err instanceof ActiveTripConflict) throw new DispatchError(409, 'You already have an active trip');
@@ -152,6 +169,40 @@ export function createDispatch({ trips, drivers, users, notifier, options = {} }
       if (other) notifier.toUser(other, 'trip:cancelled', { trip });
       if (current.status === 'requested') await closeOffers(tripId);
       return trip;
+    },
+
+    /** Driver progress: 'arrived' at the pickup, or 'in_progress' once the passenger is in the car. */
+    async advance(driver, tripId, to) {
+      const current = await trips.findById(tripId);
+      if (current?.driverId !== driver.id) throw new DispatchError(404, 'Trip not found');
+      if (!canTransition(current.status, to)) throw new DispatchError(409, `This trip is ${current.status.replace('_', ' ')}`);
+      const trip = await trips.advance(tripId, { from: current.status, to, at: opts.now() });
+      if (!trip) throw new DispatchError(409, 'This trip changed. Refresh and try again.');
+      notifier.toUser(trip.riderId, 'trip:status', { trip });
+      return trip;
+    },
+
+    /**
+     * Driver dropped the passenger off. The final fare splits each stretch of
+     * the ride between whoever was in the car at the time, and is never more
+     * than the price quoted at booking. After a partway ride, `nextLeg` is the
+     * rest of the journey for the passenger to book.
+     */
+    async complete(driver, tripId) {
+      const current = await trips.findById(tripId);
+      if (current?.driverId !== driver.id) throw new DispatchError(404, 'Trip not found');
+      if (current.status !== 'in_progress') throw new DispatchError(409, `This trip is ${current.status.replace('_', ' ')}`);
+
+      const now = opts.now();
+      const fareFinal = Math.min(current.fareEstimate, await fareFor(current, now));
+      const trip = await trips.complete(tripId, { at: now, fareFinal });
+      if (!trip) throw new DispatchError(409, 'This trip changed. Refresh and try again.');
+
+      const nextLeg = trip.matchType === 'partial'
+        ? { pickup: trip.alight, dropoff: trip.dropoff, dropoffAddress: trip.dropoffAddress, remainingKm: trip.remainingKm }
+        : null;
+      notifier.toUser(trip.riderId, 'trip:completed', { trip, nextLeg });
+      return { trip, nextLeg };
     },
 
     /** Stops pending expiry timers (for shutdown and tests). */

@@ -75,6 +75,17 @@ export function tripsRouter({ tokens, trips, dispatch }) {
     res.json(await dispatch.accept(req.user, req.params.id));
   }));
 
+  // Driver progress through a trip
+  router.post('/:id/arrived', auth, requireRole('driver'), handle(async (req, res) => {
+    res.json({ trip: await dispatch.advance(req.user, req.params.id, 'arrived') });
+  }));
+  router.post('/:id/start', auth, requireRole('driver'), handle(async (req, res) => {
+    res.json({ trip: await dispatch.advance(req.user, req.params.id, 'in_progress') });
+  }));
+  router.post('/:id/complete', auth, requireRole('driver'), handle(async (req, res) => {
+    res.json(await dispatch.complete(req.user, req.params.id));
+  }));
+
   router.post('/:id/cancel', auth, handle(async (req, res) => {
     const reason = req.body?.reason;
     if (!optionalText(reason)) return res.status(400).json({ error: 'reason must be text up to 300 characters' });

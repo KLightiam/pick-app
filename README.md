@@ -40,6 +40,9 @@ pnpm test
 | POST | `/trips` | Book the chosen driver: `{ driverId, pickup, dropoff, rideType?, seats?, pickupAddress?, dropoffAddress? }` |
 | GET | `/trips/:id` | The trip, for its rider and driver only |
 | POST | `/trips/:id/accept` | Driver accepts a ride request |
+| POST | `/trips/:id/arrived` | Driver is at the pickup |
+| POST | `/trips/:id/start` | Passenger is in the car |
+| POST | `/trips/:id/complete` | Passenger dropped off: returns `{ trip, nextLeg }` with the final fare, and the rest of the journey after a partway ride |
 | POST | `/trips/:id/cancel` | Rider or driver cancels: `{ reason? }` |
 | GET | `/drivers/nearby?lat=&lng=&radiusKm=` | Available drivers closest to a point |
 | GET | `/drivers/me` | The driver's profile, mode, route and current load |
@@ -56,6 +59,8 @@ Socket.io connections must sign in with `io(url, { auth: { token } })`.
 | `trip:offer` | server → driver | A passenger chose you: `{ trip, expiresAt }` |
 | `trip:offer_closed` | server → driver | That request was cancelled or expired |
 | `trip:accepted` | server → rider | A driver accepted: `{ trip, driver }` |
+| `trip:status` | server → rider | The driver arrived or started the trip: `{ trip }` |
+| `trip:completed` | server → rider | Dropped off: `{ trip, nextLeg }` |
 | `trip:cancelled` | server → rider/driver | The other side or the system cancelled: `{ trip }` |
 
 ## Sign-in

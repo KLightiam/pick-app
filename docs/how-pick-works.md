@@ -48,6 +48,8 @@ The **usual fare** is what a normal taxi ride of that distance would cost in tha
 
 **When people get on and off at different places**, each stretch of road is split between whoever is in the car at the time. For example, Ama rides 10 km with a commuter and Esi joins for the second half. Ama pays 65% for the first 5 km alone, and the two of them split 110% for the 5 km they share. A booking for two seats pays two shares.
 
+**When the fare is worked out.** The final fare is calculated when the driver drops the passenger off, from who was in the car and for how long. Each passenger's usual fare is spread evenly over their time in the car, and each stretch is split between whoever was aboard.
+
 **The price shown is the most you pay.** When booking a shared ride, the passenger sees the solo price as the maximum, plus what it drops to if someone else shares the whole way. If others join, the final charge goes down. Kingsley chose this on 11 October 2026.
 
 ### Worked example
@@ -78,8 +80,16 @@ These are starting points. Each lives in one place in the code and is easy to ad
 ## Known limits
 
 - **Routes are straight lines for now.** A commuter's route is a straight line from where they are to their destination. That's fine for testing but wrong on real roads, so the next step is real road routes from a maps service.
-- **Final fares aren't charged yet.** The fare-splitting is built and tested, and gets used once trips track pickup and drop-off (next step).
-- **Partway passengers book their next ride themselves.** Later the app can offer to book the next leg automatically from the drop-off point.
+- **Fares are worked out but not charged yet.** Payments come in a later step.
+- **Shared stretches are measured by time, not distance.** Each passenger's fare is spread over their time in the car. That's simple and needs no GPS trail, but a passenger who rides alone through heavy traffic gets a bit less of the shared discount than a distance-based split would give. Once real road routes are in, this can switch to distance.
+
+## A trip, step by step
+
+1. The passenger asks for options and books a driver.
+2. The driver accepts within 60 seconds.
+3. The driver taps **Arrived** at the pickup, then **Start** once the passenger is in the car. Until then, either side can cancel.
+4. The driver taps **Complete** at the drop-off. The final fare is worked out and both are told.
+5. After a partway ride, the passenger's app gets the rest of the journey (from where they got off to where they're going) so they can book their next ride straight away.
 
 ## Build plan
 
@@ -87,7 +97,7 @@ These are starting points. Each lives in one place in the code and is easy to ad
 2. ✅ Phone number sign-in for Ghana and Germany
 3. ✅ Ride requests, offers, accept and cancel
 4. ✅ Commuter and go-anywhere drivers, direction matching, solo and shared rides, fair-share pricing
-5. Trip progress: driver arrived, picked up, dropped off, final fares, and booking the next leg after a partway ride
+5. ✅ Trip progress: driver arrived, picked up, dropped off, final fares, and the next leg after a partway ride
 6. Real road routes and live map tracking
 7. Rider and driver mobile apps (React Native), and the rider web app (React)
 8. Payments: Paystack in Ghana, Stripe in Germany, and driver payouts
