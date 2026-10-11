@@ -6,9 +6,10 @@ import { driversRouter } from './routes/drivers.js';
 import { placesRouter } from './routes/places.js';
 import { paymentsRouter } from './routes/payments.js';
 import { adminRouter } from './routes/admin.js';
+import { shareRouter } from './routes/share.js';
 
 /**
- * deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, admin, documents, pushTokens, testCheckout? }
+ * deps: { otp, users, tokens, drivers, trips, dispatch, routing, geocoder, payments, payouts, admin, documents, pushTokens, safety, testCheckout? }
  * See server.js for the real ones and test/helpers.js for in-memory fakes.
  */
 export function createApp({ corsOrigin = '*', deps }) {
@@ -24,6 +25,7 @@ export function createApp({ corsOrigin = '*', deps }) {
   app.use('/places', placesRouter(deps));
   app.use('/payments', paymentsRouter(deps));
   app.use('/admin', adminRouter(deps));
+  app.use('/share', shareRouter(deps));
 
   app.use((_req, res) => res.status(404).json({ error: 'not found' }));
   app.use((err, _req, res, _next) => {

@@ -153,6 +153,7 @@ export function createDispatch({ trips, drivers, users, payments, notifier, opti
           name: profile?.name ?? null,
           vehicleMake: profile?.vehicleMake ?? null,
           vehiclePlate: profile?.vehiclePlate ?? null,
+          rating: profile?.rating ?? null,
         },
       });
       await closeOffers(tripId, driver.id);

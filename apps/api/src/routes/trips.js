@@ -3,6 +3,7 @@ import { estimateFare, getMarket, isValidPoint } from '@pick/shared';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { DispatchError } from '../trips/dispatch.js';
 import { PaymentError } from '../payments/service.js';
+import { SafetyError } from '../safety/service.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const optionalText = (v) => v === undefined || v === null || (typeof v === 'string' && v.length <= 300);
@@ -25,7 +26,7 @@ function parseRideRequest(body = {}, { needDriver }) {
   return { request: { pickup, dropoff, pickupAddress, dropoffAddress, driverId, rideType, seats, paymentMethod } };
 }
 
-export function tripsRouter({ tokens, trips, dispatch, payments }) {
+export function tripsRouter({ tokens, trips, drivers, dispatch, payments, safety }) {
   const router = Router();
   const auth = requireAuth(tokens);
 
@@ -36,7 +37,7 @@ export function tripsRouter({ tokens, trips, dispatch, payments }) {
     try {
       await fn(req, res);
     } catch (err) {
-      if (err instanceof DispatchError || err instanceof PaymentError) return res.status(err.status).json({ error: err.message });
+      if (err instanceof DispatchError || err instanceof PaymentError || err instanceof SafetyError) return res.status(err.status).json({ error: err.message });
       next(err);
     }
   };
@@ -87,7 +88,13 @@ export function tripsRouter({ tokens, trips, dispatch, payments }) {
     if (!trip || (trip.riderId !== req.user.id && trip.driverId !== req.user.id)) {
       return res.status(404).json({ error: 'Trip not found' });
     }
-    res.json({ trip });
+    // The rider also gets who's driving, e.g. when the app reopens after the driver accepted
+    const profile = trip.riderId === req.user.id && trip.driverId ? await drivers.findById(trip.driverId) : null;
+    const driver = profile && {
+      id: trip.driverId, name: profile.name ?? null, vehicleMake: profile.vehicleMake ?? null,
+      vehiclePlate: profile.vehiclePlate ?? null, rating: profile.rating ?? null,
+    };
+    res.json({ trip, ...(driver && { driver }) });
   }));
 
   router.post('/:id/accept', auth, requireRole('driver'), handle(async (req, res) => {
@@ -118,6 +125,28 @@ export function tripsRouter({ tokens, trips, dispatch, payments }) {
   // POST /trips/:id/pay -> { checkoutUrl, payment }: the Paystack or Stripe page where the rider pays
   router.post('/:id/pay', auth, requireRole('rider'), handle(async (req, res) => {
     res.json(await payments.startCheckout(req.user, req.params.id));
+  }));
+
+  // GET /trips/:id/rating -> { rating }: the one this person gave, or null
+  router.get('/:id/rating', auth, handle(async (req, res) => {
+    res.json({ rating: await safety.myRating(req.user, req.params.id) });
+  }));
+
+  // POST /trips/:id/rating { stars: 1-5, comment? } -> the rider rates the driver, or the driver the rider
+  router.post('/:id/rating', auth, handle(async (req, res) => {
+    const { stars, comment } = req.body ?? {};
+    res.status(201).json({ rating: await safety.rate(req.user, req.params.id, { stars, comment }) });
+  }));
+
+  // POST /trips/:id/share -> { url }: a link the rider sends to someone so they can follow the trip
+  router.post('/:id/share', auth, requireRole('rider'), handle(async (req, res) => {
+    res.status(201).json(await safety.share(req.user, req.params.id));
+  }));
+
+  // POST /trips/:id/reports { category, details? } -> a problem with the trip, for admins to follow up
+  router.post('/:id/reports', auth, handle(async (req, res) => {
+    const { category, details } = req.body ?? {};
+    res.status(201).json({ report: await safety.report(req.user, req.params.id, { category, details }) });
   }));
 
   router.post('/:id/cancel', auth, handle(async (req, res) => {

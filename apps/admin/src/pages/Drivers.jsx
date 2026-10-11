@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../session.js';
 import { useLoad } from '../useLoad.js';
-import { describeBalance, formatDateTime } from '../format.js';
+import { describeBalance, formatDateTime, formatRating } from '../format.js';
 import DriverDocuments from './DriverDocuments.jsx';
 
 const FILTERS = [{ value: 'pending', label: 'Waiting for approval' }, { value: 'approved', label: 'Approved' }, { value: 'all', label: 'All' }];
@@ -49,7 +49,7 @@ export default function Drivers({ country }) {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Driver</th><th>Car</th><th>Documents</th><th>Joined</th><th>Rides</th><th>Balance</th><th>Status</th><th /></tr>
+              <tr><th>Driver</th><th>Car</th><th>Documents</th><th>Joined</th><th>Rides</th><th>Rating</th><th>Balance</th><th>Status</th><th /></tr>
             </thead>
             <tbody>
               {data.drivers.map((d) => (
@@ -65,6 +65,7 @@ export default function Drivers({ country }) {
                   </td>
                   <td>{formatDateTime(d.joinedAt)}</td>
                   <td>{d.rides}</td>
+                  <td className={d.rating ? '' : 'muted'}>{formatRating(d.rating)}</td>
                   <td>{d.currency ? describeBalance(d.balance, d.currency) : '—'}</td>
                   <td>{d.approved ? (d.online ? <span className="pill ok">Online</span> : 'Approved') : <span className="pill warn">Waiting</span>}</td>
                   <td className="actions">

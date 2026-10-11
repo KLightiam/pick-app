@@ -49,6 +49,8 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
     recordSettlement: (s) => call('POST', '/admin/settlements', s),
     payouts: ({ status, country } = {}) => call('GET', `/admin/payouts${query({ status, country })}`),
     payDriver: (driverId) => call('POST', `/admin/drivers/${driverId}/payout`),
+    reports: ({ status, country } = {}) => call('GET', `/admin/reports${query({ status, country })}`),
+    resolveReport: (id, note) => call('POST', `/admin/reports/${id}/resolve`, { note }),
     driverDocuments: (driverId) => call('GET', `/admin/drivers/${driverId}/documents`),
     reviewDocument: (id, status, reason) => call('POST', `/admin/documents/${id}/review`, { status, reason }),
     /** The uploaded file as a Blob (it needs the sign-in header, so it can't be a plain link). */

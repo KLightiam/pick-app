@@ -48,7 +48,10 @@ export function pgAdminRepo(db) {
                 d.vehicle_make AS "vehicleMake", d.vehicle_plate AS "vehiclePlate", d.seats,
                 d.approved, d.approved_at AS "approvedAt", d.online, d.mode,
                 COALESCE(b.rides, 0)::int AS rides, COALESCE(b.balance, 0)::int AS balance, b.currency,
-                COALESCE(docs.approved, 0)::int AS "documentsApproved", COALESCE(docs.pending, 0)::int AS "documentsPending"
+                COALESCE(docs.approved, 0)::int AS "documentsApproved", COALESCE(docs.pending, 0)::int AS "documentsPending",
+                (SELECT CASE WHEN count(*) = 0 THEN NULL
+                             ELSE json_build_object('average', round(avg(r.stars), 1), 'count', count(*)) END
+                   FROM ratings r WHERE r.to_user = d.user_id) AS rating
            FROM drivers d
            JOIN users u ON u.id = d.user_id
            LEFT JOIN driver_balances b ON b.driver_id = d.user_id

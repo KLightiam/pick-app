@@ -6,6 +6,7 @@ import Earnings from '../../components/Earnings.js';
 import Documents from '../../components/Documents.js';
 import Payouts from '../../components/Payouts.js';
 import { getCurrentLocation } from '../../location.js';
+import { formatRating } from '../../format.js';
 import { Body, Button, Choice, ErrorText, Stepper, Title } from '../../ui.js';
 
 const MODES = [
@@ -47,6 +48,7 @@ export default function GoOnline({ driver, onOnline, onEditCar }) {
   return (
     <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }} keyboardShouldPersistTaps="handled">
       <Title>Ready to drive?</Title>
+      {driver.approved && <Body muted>Your rating: {formatRating(driver.rating, 'no ratings yet')}</Body>}
       {!driver.approved && (
         <>
           <Body>Your driver account is waiting for approval. Upload your documents below, and you can go online once Pick has checked them.</Body>

@@ -83,3 +83,9 @@ export function describePayment(payment, who) {
   if (payment.status === 'paid') return `${amount} paid in the app`;
   return who === 'driver' ? `${amount} to be paid in the app` : `${amount} to pay in the app`;
 }
+
+/** "★ 4.8 (23)", or "New driver" before anyone has rated them. */
+export function formatRating(rating, newLabel = 'New driver') {
+  if (!rating?.count) return newLabel;
+  return `★ ${rating.average.toFixed(1)} (${rating.count})`;
+}

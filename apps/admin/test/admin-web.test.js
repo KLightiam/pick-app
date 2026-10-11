@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApi } from '../src/api.js';
-import { describeBalance, describePayment, formatMoney, parseMoney } from '../src/format.js';
+import { describeBalance, describePayment, formatMoney, formatRating, parseMoney } from '../src/format.js';
 
 test('admin API calls carry the token and build filters into the URL', async () => {
   const calls = [];
@@ -13,6 +13,8 @@ test('admin API calls carry the token and build filters into the URL', async () 
   await api.recordSettlement({ driverId: 'd1', direction: 'to_driver', amount: 2411 });
   await api.payouts({ status: 'failed' });
   await api.payDriver('d1');
+  await api.reports({ status: 'open', country: 'DE' });
+  await api.resolveReport('r1', 'Called the rider');
   assert.deepEqual(calls.map((c) => `${c.method} ${c.url}`), [
     'GET http://api/admin/drivers?status=pending&country=GH',
     'GET http://api/admin/overview?days=7',
@@ -20,7 +22,10 @@ test('admin API calls carry the token and build filters into the URL', async () 
     'POST http://api/admin/settlements',
     'GET http://api/admin/payouts?status=failed',
     'POST http://api/admin/drivers/d1/payout',
+    'GET http://api/admin/reports?status=open&country=DE',
+    'POST http://api/admin/reports/r1/resolve',
   ]);
+  assert.deepEqual(JSON.parse(calls[7].body), { note: 'Called the rider' });
   assert.equal(calls[0].headers.Authorization, 'Bearer tok');
   assert.deepEqual(JSON.parse(calls[2].body), { approved: false });
 });
@@ -59,4 +64,9 @@ test('document files are fetched with the sign-in header', async () => {
   assert.equal(await api.documentFile('doc1'), 'BLOB');
   assert.equal(calls[0].url, 'http://api/admin/documents/doc1/file');
   assert.equal(calls[0].headers.Authorization, 'Bearer tok');
+});
+
+test('driver ratings', () => {
+  assert.equal(formatRating({ average: 4.25, count: 4 }), '4.3 ★ (4)');
+  assert.equal(formatRating(null), 'No ratings');
 });

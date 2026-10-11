@@ -27,6 +27,8 @@ import { createPayouts } from './payouts/service.js';
 import { pgPushTokensRepo } from './push/repo.js';
 import { expoPushSender } from './push/expo.js';
 import { withPush } from './push/notifier.js';
+import { pgSafetyRepo } from './safety/repo.js';
+import { createSafety } from './safety/service.js';
 
 const server = http.createServer();
 const tokens = createTokens({ secret: config.jwtSecret, expiresIn: config.jwtExpiresIn });
@@ -57,6 +59,7 @@ const deps = {
   payments,
   payouts,
   pushTokens,
+  safety: createSafety({ repo: pgSafetyRepo(db), trips, drivers, publicUrl: config.publicUrl }),
   admin: pgAdminRepo(db),
   documents: createDocuments({
     repo: pgDocumentsRepo(db), storage: createStorage({ ...config.storage, isProduction: config.isProduction }),

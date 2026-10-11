@@ -53,12 +53,16 @@ pnpm test
 | POST | `/trips/:id/start` | Passenger is in the car |
 | POST | `/trips/:id/complete` | Passenger dropped off: returns `{ trip, nextLeg }` with the final fare, and the rest of the journey after a partway ride |
 | POST | `/trips/:id/cancel` | Rider or driver cancels: `{ reason? }` |
+| GET, POST | `/trips/:id/rating` | After a completed trip: rate the other side `{ stars: 1-5, comment? }`, once; GET returns `{ rating }` you gave, or null |
+| POST | `/trips/:id/share` | Riders, until the trip ends: `{ url }`, a link anyone can open to follow the ride |
+| POST | `/trips/:id/reports` | Rider or driver reports a problem: `{ category, details? }` (categories in `packages/shared/src/safety.js`) |
+| GET | `/share/:token`, `/share/:token/status` | Public: the shared trip page, and its JSON (status, driver, car, and location while the ride is on) |
 | GET | `/places/search?q=&lat=&lng=` | Address search in the user's country, nearest first: `{ places: [{ name, address, location }] }` |
 | GET | `/drivers/nearby?lat=&lng=&radiusKm=` | Available drivers closest to a point |
 | GET | `/drivers/me` | The driver's profile, mode, route and current load |
 | GET | `/drivers/me/earnings?days=7` | Rides with what the driver earned, and their balance with Pick (all time) |
 | GET | `/admin/overview?days=&country=` | Admins: drivers, riders, trips and money for the period |
-| GET | `/admin/drivers?status=&q=&country=` | Admins: drivers waiting for approval, approved, or all, with rides and balance |
+| GET | `/admin/drivers?status=&q=&country=` | Admins: drivers waiting for approval, approved, or all, with rides, rating and balance |
 | POST | `/admin/drivers/:id/approval` | Admins: `{ approved }` approves a driver, or suspends them and takes them offline |
 | GET | `/admin/drivers/:id/documents` | Admins: a driver's document checklist and every upload |
 | GET | `/admin/documents/:id/file` | Admins: the uploaded photo or PDF |
@@ -68,6 +72,8 @@ pnpm test
 | GET, POST | `/admin/settlements` | Admins: money paid to or received from a driver outside the app `{ driverId, direction, amount, reference?, note? }` |
 | GET | `/admin/payouts?status=&country=` | Admins: payouts sent to drivers, newest first |
 | POST | `/admin/drivers/:id/payout` | Admins: Pay now, sending the driver their whole balance |
+| GET | `/admin/reports?status=open\|resolved&country=` | Admins: problems riders and drivers reported, open safety reports first |
+| POST | `/admin/reports/:id/resolve` | Admins: `{ note? }` marks a report dealt with |
 | PUT | `/drivers/me/vehicle` | `{ vehicleMake?, vehiclePlate?, seats }` |
 | GET | `/drivers/me/documents` | The documents the driver's country asks for, each with its latest upload and status |
 | PUT | `/drivers/me/documents/:kind` | Upload a document: the photo (JPEG, PNG, HEIC) or PDF is the request body, up to 8 MB |
@@ -137,8 +143,9 @@ pnpm --filter @pick/admin dev                                   # http://localho
 Admins sign in with their phone number and the texted code, like everyone else; only numbers made admin with `make-admin` get in. Set `VITE_API_URL` if the API isn't at `http://localhost:4000`, and add the dashboard's address to the API's `CORS_ORIGIN` in production.
 
 - **Overview:** drivers waiting for approval and online, riders, trips by status, fares, commission, and app payments not made yet, for today, 7 or 30 days, by country.
-- **Drivers:** check each driver's documents (view, approve, or reject with a reason the driver sees in the app), approve new drivers, suspend drivers (they go offline at once), search by name, phone or plate.
+- **Drivers:** check each driver's documents (view, approve, or reject with a reason the driver sees in the app), approve new drivers, suspend drivers (they go offline at once), search by name, phone or plate. Each driver's star rating shows next to their rides.
 - **Trips:** every trip with rider, driver, route, fare, payment and who cancelled.
+- **Reports:** problems riders and drivers reported from the app, safety reports first. Mark each one resolved with a note on what was done.
 - **Money:** each driver's balance with Pick. Pick owes drivers what app riders paid (minus commission) and drivers owe Pick commission on cash rides. Drivers with a payout account are paid every week by themselves; Pay now sends a driver's balance at once. Every payout is listed with its outcome, and money that changes hands any other way can be recorded with its reference.
 
 ## Driver documents
@@ -165,6 +172,12 @@ Pick pays drivers what it owes them every week, once it's at least GHS 20 or EUR
 - **Germany:** drivers tap Set up payouts and give their ID and bank details on Stripe's own page (Stripe Connect Express). Pick transfers their earnings to that Stripe account and Stripe pays it out to their bank. Connect must be turned on in the Stripe dashboard.
 
 A payout counts against the driver's balance while it's on its way, so the same money is never sent twice, and a failed one puts it back. If Pick never hears how a transfer went, the hourly run asks Paystack or Stripe again. Without keys, payouts go through the test provider and always succeed.
+
+## Ratings and safety
+
+- **Ratings:** after a completed trip, the rider and the driver can each give the other 1 to 5 stars and a comment, once. A driver's average and number of ratings show to riders choosing a driver, to the driver, and in the dashboard. New drivers show as "New driver".
+- **Share trip:** riders tap Share trip to send a link (WhatsApp, SMS, anything) that opens a page showing the ride's status, the driver, the car and where the car is, refreshed every 10 seconds. It needs no app or account. Once the ride ends or is cancelled, the page only says so. Links are long random tokens and the page isn't indexed or cached.
+- **Report a problem:** riders and drivers can report a problem with a trip at any time from the trip screen, by category (felt unsafe, behaviour, driving, payment, lost item, other) with details. Reports go to the dashboard's Reports page, safety first. The emergency button still calls 112.
 
 ## Address search
 

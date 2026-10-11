@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, Linking, View } from 'react-native';
+import { AppState, Linking, ScrollView, View } from 'react-native';
 import { distanceKm } from '@pick/shared';
 import { api } from '../../api-instance.js';
-import { CANCELLABLE, TRIP_STATUS_LABELS, describePayment, formatKm, formatMoney } from '../../format.js';
+import RateTrip from '../../components/RateTrip.js';
+import ReportProblem from '../../components/ReportProblem.js';
+import ShareTrip from '../../components/ShareTrip.js';
+import { CANCELLABLE, TRIP_STATUS_LABELS, describePayment, formatKm, formatMoney, formatRating } from '../../format.js';
 import { useLiveEvent } from '../../live.js';
 import LiveMap from '../../map/LiveMap.js';
 import { riderScene } from '../../map/scene.js';
-import { Body, Button, Card, ErrorText, Screen, Title } from '../../ui.js';
+import { Body, Button, Card, ErrorText, Title } from '../../ui.js';
 
 /** A booked ride as it happens: waiting for the driver, on the way, and the final fare. */
 export default function RiderTrip({ booking, live, onDone }) {
@@ -24,8 +27,9 @@ export default function RiderTrip({ booking, live, onDone }) {
   const refresh = useCallback(async () => {
     live?.emit('trip:watch', { tripId: trip.id });
     try {
-      const { trip: latest } = await api.trip(trip.id);
+      const { trip: latest, driver: assigned } = await api.trip(trip.id);
       setTrip(latest);
+      if (assigned) setDriver(assigned);
     } catch { /* keep what we have; the next event will update it */ }
   }, [live, trip.id]);
   useEffect(() => { refresh(); }, [refresh]);
@@ -84,7 +88,7 @@ export default function RiderTrip({ booking, live, onDone }) {
   const finished = trip.status === 'completed' || trip.status === 'cancelled';
 
   return (
-    <Screen>
+    <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20, gap: 14 }} keyboardShouldPersistTaps="handled">
       <Title>{TRIP_STATUS_LABELS[trip.status]}</Title>
       {trip.status === 'requested' && (
         <Body muted>If the driver doesn't accept within a minute, you can choose someone else.</Body>
@@ -94,6 +98,7 @@ export default function RiderTrip({ booking, live, onDone }) {
         <Card>
           <Body style={{ fontWeight: '600' }}>{driver.name ?? 'Your driver'}</Body>
           <Body muted>{[driver.vehicleMake, driver.vehiclePlate].filter(Boolean).join(' · ')}</Body>
+          {driver.rating !== undefined && <Body muted>{formatRating(driver.rating)}</Body>}
           {awayKm !== null && <Body>{formatKm(awayKm)} away</Body>}
         </Card>
       )}
@@ -115,6 +120,8 @@ export default function RiderTrip({ booking, live, onDone }) {
         <Body>The driver didn't accept in time. Choose another driver.</Body>
       )}
 
+      {trip.status === 'completed' && trip.driverId && <RateTrip tripId={trip.id} about={driver?.name ?? 'your driver'} />}
+
       <ErrorText>{error}</ErrorText>
       <View style={{ gap: 10, marginTop: 'auto' }}>
         {unpaid && (
@@ -133,10 +140,12 @@ export default function RiderTrip({ booking, live, onDone }) {
         {CANCELLABLE.includes(trip.status) && (
           <Button title="Cancel ride" variant="secondary" onPress={cancel} busy={busy} />
         )}
+        {!finished && <ShareTrip tripId={trip.id} />}
+        {trip.driverId && <ReportProblem tripId={trip.id} />}
         {trip.status !== 'requested' && !finished && (
           <Button title="Emergency: call 112" variant="danger" onPress={() => Linking.openURL('tel:112')} />
         )}
       </View>
-    </Screen>
+    </ScrollView>
   );
 }

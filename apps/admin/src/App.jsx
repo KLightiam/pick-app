@@ -4,12 +4,14 @@ import Overview from './pages/Overview.jsx';
 import Drivers from './pages/Drivers.jsx';
 import Trips from './pages/Trips.jsx';
 import Money from './pages/Money.jsx';
+import Reports from './pages/Reports.jsx';
 
 const PAGES = [
   { key: 'overview', label: 'Overview', Page: Overview },
   { key: 'drivers', label: 'Drivers', Page: Drivers },
   { key: 'trips', label: 'Trips', Page: Trips },
   { key: 'money', label: 'Money', Page: Money },
+  { key: 'reports', label: 'Reports', Page: Reports },
 ];
 
 const COUNTRIES = [

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  appPaymentLabel, describeDropoff, describeFare, describePayment, directionsUrl, formatKm, formatMoney, liveOffers, secondsLeft,
+  appPaymentLabel, describeDropoff, describeFare, describePayment, directionsUrl, formatKm, formatMoney, formatRating, liveOffers, secondsLeft,
 } from '../src/format.js';
 
 test('money shows in cedis and euros from minor units', () => {
@@ -55,4 +55,11 @@ test('payment lines for riders and drivers', () => {
   assert.equal(describePayment({ ...app, status: 'paid' }, 'driver'), '€12.90 paid in the app');
   assert.equal(appPaymentLabel('GH'), 'Card or MoMo');
   assert.equal(appPaymentLabel('DE'), 'Card');
+});
+
+test('ratings show the average and count, or that the driver is new', () => {
+  assert.equal(formatRating({ average: 4.5, count: 2 }), '★ 4.5 (2)');
+  assert.equal(formatRating({ average: 5, count: 1 }), '★ 5.0 (1)');
+  assert.equal(formatRating(null), 'New driver');
+  assert.equal(formatRating(null, 'No ratings yet'), 'No ratings yet');
 });
