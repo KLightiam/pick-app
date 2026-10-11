@@ -45,6 +45,14 @@ export function pgTripsRepo(db) {
       return rows[0] ?? null;
     },
 
+    async findActiveForDriver(driverId) {
+      const { rows } = await db().query(
+        `${SELECT} WHERE driver_id = $1 AND status IN ('accepted', 'arrived', 'in_progress') ORDER BY accepted_at`,
+        [driverId],
+      );
+      return rows;
+    },
+
     async create(t) {
       try {
         const { rows } = await db().query(

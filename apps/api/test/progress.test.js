@@ -167,3 +167,19 @@ test('a completed ride frees its seats', async (t) => {
   const free = await post(ctx, second, '/trips/options', { pickup: at(6), dropoff: at(10) });
   assert.equal(free.body.options.length, 1);
 });
+
+test('GET /trips/active returns the rider\'s current trip and the driver\'s passengers', async (t) => {
+  const ctx = clockApp();
+  t.after(() => ctx.dispatch.close());
+  const driver = await onlineDriver(ctx, { location: at(0), mode: 'commute', destination: at(10), seatsOffered: 2 });
+  const rider = await makeUser(ctx, 'rider');
+  const get = (user) => request(ctx.app).get('/trips/active').set('Authorization', user.auth);
+
+  assert.deepEqual((await get(rider)).body.trips, []);
+  const { body } = await post(ctx, rider, '/trips', { driverId: driver.id, pickup: at(1), dropoff: at(10), rideType: 'shared' })
+    .expect(201);
+  assert.equal((await get(rider)).body.trips[0].id, body.trip.id);
+  assert.deepEqual((await get(driver)).body.trips, []); // not theirs until accepted
+  await post(ctx, driver, `/trips/${body.trip.id}/accept`).expect(200);
+  assert.equal((await get(driver)).body.trips[0].id, body.trip.id);
+});

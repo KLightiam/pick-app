@@ -14,6 +14,7 @@ import { createDispatch } from './trips/dispatch.js';
 import { createSms } from './sms/index.js';
 import { createRouting } from './routing/index.js';
 import { createRouteKeeper } from './drivers/routeKeeper.js';
+import { createGeocoder } from './places/index.js';
 
 const server = http.createServer();
 const tokens = createTokens({ secret: config.jwtSecret, expiresIn: config.jwtExpiresIn });
@@ -29,6 +30,7 @@ const deps = {
   drivers,
   trips,
   routing,
+  geocoder: createGeocoder({ url: config.geocoderUrl }),
   otp: createOtpService({ store: pgOtpStore(db), sms: createSms(config.sms), secret: config.jwtSecret }),
   dispatch: createDispatch({ trips, drivers, users, notifier: socketNotifier(io) }),
 };

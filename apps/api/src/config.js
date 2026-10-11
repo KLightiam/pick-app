@@ -15,6 +15,7 @@ export const config = {
     provider: process.env.ROUTING_PROVIDER ?? 'osrm', // 'osrm' | 'straight'
     osrmUrl: process.env.OSRM_URL ?? 'https://router.project-osrm.org',
   },
+  geocoderUrl: process.env.GEOCODER_URL ?? 'https://photon.komoot.io',
   sms: {
     provider: process.env.SMS_PROVIDER ?? 'console', // 'console' | 'twilio'
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
