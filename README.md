@@ -34,9 +34,24 @@ pnpm test
 | POST | `/auth/verify` | Check `{ phone, code }` and return `{ token, user }`; new accounts also send `role` (`rider` or `driver`) and optional `name` |
 | GET | `/auth/me` | The signed-in user (send `Authorization: Bearer <token>`) |
 | POST | `/trips/estimate` | Fare, distance and time for `{ country, pickup, dropoff }`, in GHS or EUR |
-| GET | `/drivers/nearby?lat=&lng=&radiusKm=` | Online drivers closest to a point |
+| POST | `/trips` | Rider requests a ride: `{ pickup, dropoff, pickupAddress?, dropoffAddress? }` |
+| GET | `/trips/:id` | The trip, for its rider and driver only |
+| POST | `/trips/:id/accept` | Driver accepts an offered ride |
+| POST | `/trips/:id/cancel` | Rider or driver cancels: `{ reason? }` |
+| GET | `/drivers/nearby?lat=&lng=&radiusKm=` | Available drivers closest to a point |
+| POST | `/drivers/me/status` | Driver goes online `{ online: true, location }` or offline `{ online: false }` |
 
-Socket.io connections must sign in with `io(url, { auth: { token } })`. Drivers send `driver:location`; riders send `trip:watch` and receive `trip:driver_location`.
+Socket.io connections must sign in with `io(url, { auth: { token } })`.
+
+| Event | Direction | Meaning |
+| --- | --- | --- |
+| `driver:location` | driver → server | `{ lat, lng, tripId? }` live position |
+| `trip:watch` | rider → server | `{ tripId }` follow a trip |
+| `trip:driver_location` | server → rider | Driver's position during the trip |
+| `trip:offer` | server → driver | A ride request nearby: `{ trip, expiresAt }` |
+| `trip:offer_closed` | server → driver | That request was taken, cancelled or expired |
+| `trip:accepted` | server → rider | A driver accepted: `{ trip, driver }` |
+| `trip:cancelled` | server → rider/driver | The other side or the system cancelled: `{ trip }` |
 
 ## Sign-in
 
@@ -47,3 +62,22 @@ Locally, `SMS_PROVIDER=console` prints codes to the API's terminal. In productio
 ## Markets
 
 `packages/shared/src/markets.js` holds each country's currency, payment provider and (placeholder) pricing: Ghana uses GHS and Paystack, Germany uses EUR and Stripe.
+
+## Ride requests
+
+When a rider requests a ride, the 5 nearest available drivers within 5 km get an offer, and the first to accept gets the trip. If nobody accepts within 60 seconds, the request is cancelled and the rider is told. A rider or driver can only have one active trip at a time; the database enforces this.
+
+New drivers can't go online until they're approved. Until the admin dashboard exists, approve one with:
+
+```sh
+pnpm --filter @pick/api approve-driver +233241234567
+```
+
+## Database tests
+
+`apps/api/test/db.test.js` runs the API against a real PostgreSQL + PostGIS database. It runs in CI, and locally when `TEST_DATABASE_URL` is set:
+
+```sh
+pnpm db:up && pnpm db:migrate
+TEST_DATABASE_URL=postgres://pick:pick@localhost:5432/pick pnpm test
+```
