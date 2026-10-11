@@ -140,3 +140,17 @@ test('the price rules match what Kingsley set', () => {
   assert.ok(PRICE_RULES.commuteSharedTotal >= 1);
   assert.equal(PRICE_RULES.anywhereSharedTotal, 1);
 });
+
+test('trimRoute keeps only the part of the route ahead of the driver', async () => {
+  const { trimRoute } = await import('../src/index.js');
+  const bent = [at(0), at(5), at(5, 5)];
+  const halfway = trimRoute(bent, at(3, 0.2));
+  assert.equal(halfway.route.length, 3);
+  assert.ok(Math.abs(halfway.route[0].lng - at(3).lng) < 1e-6);
+  assert.ok(Math.abs(halfway.offRouteKm - 0.2) < 0.02);
+  const pastBend = trimRoute(bent, at(5, 2));
+  assert.equal(pastBend.route.length, 2);
+  assert.ok(Math.abs(routeLengthKm(pastBend.route) - 3) < 0.05);
+  const lost = trimRoute(bent, at(1, 3));
+  assert.ok(lost.offRouteKm > 2.9);
+});

@@ -12,18 +12,23 @@ import { pgDriversRepo } from './drivers/repo.js';
 import { pgTripsRepo } from './trips/repo.js';
 import { createDispatch } from './trips/dispatch.js';
 import { createSms } from './sms/index.js';
+import { createRouting } from './routing/index.js';
+import { createRouteKeeper } from './drivers/routeKeeper.js';
 
 const server = http.createServer();
 const tokens = createTokens({ secret: config.jwtSecret, expiresIn: config.jwtExpiresIn });
 const users = pgUsersRepo(db);
 const drivers = pgDriversRepo(db);
 const trips = pgTripsRepo(db);
-const io = attachRealtime(server, { corsOrigin: config.corsOrigin, tokens, drivers });
+const routing = createRouting(config.routing);
+const routeKeeper = createRouteKeeper({ drivers, routing });
+const io = attachRealtime(server, { corsOrigin: config.corsOrigin, tokens, drivers, routeKeeper });
 const deps = {
   tokens,
   users,
   drivers,
   trips,
+  routing,
   otp: createOtpService({ store: pgOtpStore(db), sms: createSms(config.sms), secret: config.jwtSecret }),
   dispatch: createDispatch({ trips, drivers, users, notifier: socketNotifier(io) }),
 };

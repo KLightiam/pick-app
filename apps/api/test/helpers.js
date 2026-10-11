@@ -4,6 +4,7 @@ import { createApp } from '../src/app.js';
 import { createOtpService } from '../src/auth/otp.js';
 import { createTokens } from '../src/auth/tokens.js';
 import { createDispatch } from '../src/trips/dispatch.js';
+import { straightRouter } from '../src/routing/index.js';
 import { ActiveTripConflict, NoRoomConflict } from '../src/trips/repo.js';
 import { hasRoom } from '../src/trips/capacity.js';
 
@@ -94,13 +95,15 @@ export function memoryDb() {
         online: true, location: status.location, mode: status.mode, seatsOffered: status.seatsOffered,
         destination: commute ? status.destination : null,
         destinationAddress: commute ? status.destinationAddress ?? null : null,
-        route: commute ? [status.location, status.destination] : null,
+        route: commute ? status.route : null,
       });
     },
     async updateLocation(userId, location) {
+      drivers.get(userId).location = location;
+    },
+    async setRoute(userId, route) {
       const d = drivers.get(userId);
-      d.location = location;
-      if (d.mode === 'commute' && d.destination) d.route = [location, d.destination];
+      if (d.mode === 'commute') d.route = route;
     },
     async candidates(pickup, { anywhereRadiusKm, pickupDetourKm }) {
       const nearRoute = (route) => projectOntoRoute(route, pickup).crossKm <= pickupDetourKm;
@@ -223,7 +226,7 @@ export function fakeNotifier() {
   };
 }
 
-export function testApp({ now, dispatchOptions } = {}) {
+export function testApp({ now, dispatchOptions, routing = straightRouter() } = {}) {
   const sms = fakeSms();
   const store = memoryOtpStore();
   const notifier = fakeNotifier();
@@ -231,6 +234,6 @@ export function testApp({ now, dispatchOptions } = {}) {
   const tokens = createTokens({ secret: 'test-secret', expiresIn: '1h' });
   const otp = createOtpService({ store, sms, secret: 'test-secret', now });
   const dispatch = createDispatch({ trips, drivers, users, notifier, options: dispatchOptions });
-  const app = createApp({ deps: { otp, users, tokens, drivers, trips, dispatch } });
-  return { app, sms, store, users, drivers, trips, tokens, notifier, dispatch };
+  const app = createApp({ deps: { otp, users, tokens, drivers, trips, dispatch, routing } });
+  return { app, sms, store, users, drivers, trips, tokens, notifier, dispatch, routing };
 }

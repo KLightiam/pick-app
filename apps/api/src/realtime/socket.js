@@ -4,7 +4,7 @@ import { db } from '../db/pool.js';
 
 // Live channel: drivers stream their location, riders watch their trip's room.
 // Every connection must carry a sign-in token: io(url, { auth: { token } }).
-export function attachRealtime(httpServer, { corsOrigin, tokens, drivers }) {
+export function attachRealtime(httpServer, { corsOrigin, tokens, drivers, routeKeeper }) {
   const io = new Server(httpServer, { cors: { origin: corsOrigin } });
 
   io.use((socket, next) => {
@@ -22,6 +22,7 @@ export function attachRealtime(httpServer, { corsOrigin, tokens, drivers }) {
       if (user.role !== 'driver' || !isValidPoint({ lat, lng })) return;
       try {
         await drivers.updateLocation(user.id, { lat, lng });
+        routeKeeper?.onLocation(user.id, { lat, lng }).catch((err) => console.error('reroute', err.message));
         if (tripId) {
           const { rowCount } = await db().query(
             'SELECT 1 FROM trips WHERE id = $1 AND driver_id = $2', [tripId, user.id],

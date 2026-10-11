@@ -26,6 +26,8 @@ const fixRoute = (row) => row && {
 };
 
 const point = (latParam, lngParam) => `ST_SetSRID(ST_MakePoint(${lngParam}, ${latParam}), 4326)`;
+const lineFromGeoJson = (param) => `ST_SetSRID(ST_GeomFromGeoJSON(${param}), 4326)::geography`;
+const toGeoJson = (route) => JSON.stringify({ type: 'LineString', coordinates: route.map((p) => [p.lng, p.lat]) });
 
 // Postgres storage for drivers: vehicle, availability, mode, route and current load.
 export function pgDriversRepo(db) {
@@ -48,15 +50,15 @@ export function pgDriversRepo(db) {
     },
 
     /**
-     * online: { online: true, location, mode, destination?, destinationAddress?, seatsOffered } or { online: false }.
-     * A commuter's route runs from where they are to their destination.
+     * online: { online: true, location, mode, destination?, destinationAddress?, route?, seatsOffered }
+     * or { online: false }. `route` is the commuter's road route, a list of { lat, lng }.
      */
     async setStatus(userId, status) {
       if (!status.online) {
         await db().query('UPDATE drivers SET online = false WHERE user_id = $1', [userId]);
         return;
       }
-      const { location, mode, destination, destinationAddress, seatsOffered } = status;
+      const { location, mode, destination, destinationAddress, route, seatsOffered } = status;
       const commute = mode === 'commute';
       await db().query(
         `UPDATE drivers
@@ -64,24 +66,26 @@ export function pgDriversRepo(db) {
                 location = ${point('$2', '$3')}::geography, location_at = now(),
                 destination = CASE WHEN $4 = 'commute' THEN ${point('$6', '$7')}::geography END,
                 destination_address = CASE WHEN $4 = 'commute' THEN $8 END,
-                route = CASE WHEN $4 = 'commute'
-                             THEN ST_MakeLine(${point('$2', '$3')}, ${point('$6', '$7')})::geography END
+                route = CASE WHEN $4 = 'commute' THEN ${lineFromGeoJson('$9')} END
           WHERE user_id = $1`,
         [userId, location.lat, location.lng, mode, seatsOffered,
           commute ? destination.lat : null, commute ? destination.lng : null,
-          commute ? destinationAddress ?? null : null],
+          commute ? destinationAddress ?? null : null, commute ? toGeoJson(route) : null],
       );
     },
 
-    /** Moves the driver and, for commuters, restarts their route from the new position. */
     async updateLocation(userId, location) {
       await db().query(
-        `UPDATE drivers
-            SET location = ${point('$2', '$3')}::geography, location_at = now(),
-                route = CASE WHEN mode = 'commute' AND destination IS NOT NULL
-                             THEN ST_MakeLine(${point('$2', '$3')}, destination::geometry)::geography END
-          WHERE user_id = $1`,
+        `UPDATE drivers SET location = ${point('$2', '$3')}::geography, location_at = now() WHERE user_id = $1`,
         [userId, location.lat, location.lng],
+      );
+    },
+
+    /** Replaces a commuter's road route, e.g. after they took a different road. */
+    async setRoute(userId, route) {
+      await db().query(
+        `UPDATE drivers SET route = ${lineFromGeoJson('$2')} WHERE user_id = $1 AND mode = 'commute'`,
+        [userId, toGeoJson(route)],
       );
     },
 
