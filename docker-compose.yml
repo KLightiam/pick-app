@@ -1,0 +1,13 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: pick
+      POSTGRES_PASSWORD: pick
+      POSTGRES_DB: pick
+    ports:
+      - "5432:5432"
+    volumes:
+      - pick-db:/var/lib/postgresql/data
+volumes:
+  pick-db:

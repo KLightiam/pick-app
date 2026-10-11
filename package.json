@@ -1,0 +1,12 @@
+{
+  "name": "pick",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @pick/api dev",
+    "test": "pnpm -r test",
+    "db:up": "docker compose up -d db",
+    "db:migrate": "pnpm --filter @pick/api migrate"
+  },
+  "engines": { "node": ">=20" }
+}
