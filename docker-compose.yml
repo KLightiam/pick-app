@@ -5,9 +5,15 @@ services:
       POSTGRES_USER: pick
       POSTGRES_PASSWORD: pick
       POSTGRES_DB: pick
+    # 5433 on this computer, so it doesn't clash with another PostgreSQL on the usual 5432
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pick-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "pick"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 volumes:
   pick-db:

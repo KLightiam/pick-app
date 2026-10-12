@@ -226,7 +226,7 @@ pnpm --filter @pick/api approve-driver +233241234567
 
 ```sh
 pnpm db:up && pnpm db:migrate
-TEST_DATABASE_URL=postgres://pick:pick@localhost:5432/pick pnpm test
+TEST_DATABASE_URL=postgres://pick:pick@localhost:5433/pick pnpm test
 ```
 
 ## Road routes
