@@ -14,7 +14,7 @@ if (isProduction) {
 export const config = {
   isProduction,
   port: Number(process.env.PORT ?? 4000),
-  databaseUrl: process.env.DATABASE_URL ?? 'postgres://pick:pick@localhost:5432/pick',
+  databaseUrl: process.env.DATABASE_URL ?? 'postgres://pick:pick@localhost:5433/pick',
   corsOrigin: parseOrigins(process.env.CORS_ORIGIN), // CORS_ORIGIN=https://pick.example,https://admin.pick.example
   jwtSecret: process.env.JWT_SECRET ?? 'dev-only-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '30d',

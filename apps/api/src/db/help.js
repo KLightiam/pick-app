@@ -33,7 +33,7 @@ export function explainDbError(err, databaseUrl) {
   }
   if (err.code === 'ENOTFOUND') return `Can't find ${where}. Check DATABASE_URL in apps/api/.env.`;
   if (err.code === '28P01' || err.code === '28000') {
-    return `${Where} turned down the username or password. If PostgreSQL is also installed on this computer, it is probably answering on port 5432 instead of Pick's Docker database. Stop that PostgreSQL, or move Pick's database to another port: in docker-compose.yml change "5432:5432" to "5433:5432", run \`pnpm db:up\` again, and use port 5433 in DATABASE_URL in apps/api/.env.`;
+    return `${Where} turned down the username or password. That usually means another PostgreSQL on this computer is answering instead of Pick's Docker database, which runs on port 5433. Make sure DATABASE_URL in apps/api/.env is postgres://pick:pick@localhost:5433/pick, and that \`pnpm db:up\` has started the database.`;
   }
   if (err.code === '3D000') return `${Where} has no database with that name. Check DATABASE_URL in apps/api/.env.`;
   if (/postgis/i.test(err.message ?? '')) {

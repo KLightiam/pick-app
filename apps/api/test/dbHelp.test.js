@@ -7,7 +7,7 @@ const fail = (code, message = 'boom') => Object.assign(new Error(message), { cod
 
 test('setup errors are explained in plain words', () => {
   assert.match(explainDbError(fail('ECONNREFUSED'), URL), /^Can't reach the database at localhost:5432\. Make sure Docker Desktop is running/);
-  assert.match(explainDbError(fail('28P01'), URL), /PostgreSQL is also installed on this computer/);
+  assert.match(explainDbError(fail('28P01'), URL), /another PostgreSQL on this computer/);
   assert.match(explainDbError(fail('3D000'), URL), /no database with that name/);
   assert.match(explainDbError(fail('58P01', 'could not open extension control file "postgis.control"'), URL), /doesn't have PostGIS/);
   assert.equal(explainDbError(fail('42601', 'syntax error'), URL), null);
