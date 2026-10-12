@@ -5,7 +5,7 @@
   "scripts": {
     "dev:api": "pnpm --filter @pick/api dev",
     "test": "pnpm -r test",
-    "db:up": "docker compose up -d db",
+    "db:up": "docker compose up -d --wait db",
     "db:migrate": "pnpm --filter @pick/api migrate"
   },
   "engines": { "node": ">=20" }

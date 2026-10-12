@@ -9,5 +9,10 @@ services:
       - "5432:5432"
     volumes:
       - pick-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-U", "pick"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 volumes:
   pick-db:
