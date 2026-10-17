@@ -7,7 +7,8 @@ export class ApiError extends Error {
   }
 }
 
-export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...args) }) {
+// showAddress (development builds) names the address that failed, so a wrong EXPO_PUBLIC_API_URL is easy to spot.
+export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...args), showAddress = false }) {
   // `raw` sends a file as-is: { body, contentType }.
   async function call(method, path, body, raw) {
     const token = await getToken?.();
@@ -23,7 +24,9 @@ export function createApi({ baseUrl, getToken, fetchFn = (...args) => fetch(...a
         body: raw ? raw.body : body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch {
-      throw new ApiError(0, "Can't reach Pick. Check your internet connection.");
+      throw new ApiError(0, showAddress
+        ? `Can't reach the Pick API at ${baseUrl}. Is it running, and can this device reach that address?`
+        : "Can't reach Pick. Check your internet connection.");
     }
     if (res.status === 204) return null;
     const data = await res.json().catch(() => ({}));

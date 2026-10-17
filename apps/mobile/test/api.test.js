@@ -65,6 +65,12 @@ test('a network failure becomes a friendly ApiError with status 0', async () => 
   await assert.rejects(api.activeTrips(), (err) => err.status === 0 && /Can't reach Pick/.test(err.message));
 });
 
+test('in development, a network failure names the address it tried', async () => {
+  const { fetchFn } = recorder(new TypeError('Network request failed'));
+  const api = createApi({ baseUrl: 'http://192.168.1.23:4000', fetchFn, showAddress: true });
+  await assert.rejects(api.activeTrips(), (err) => err.status === 0 && err.message.includes('http://192.168.1.23:4000'));
+});
+
 test('trip actions hit the right paths', async () => {
   const { calls, fetchFn } = recorder(json(200, {}));
   const api = createApi({ baseUrl: 'http://api', fetchFn });
